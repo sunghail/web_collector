@@ -1,0 +1,469 @@
+'use client';
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { ArrowDown, BookmarkPlus, ExternalLink, Link2, SendHorizontal, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import api from '@/lib/api';
+import { MESSAGE_MAX_LENGTH, hostnameOf, type ChatMessage } from '@/lib/chat';
+import { ShareSiteDialog, type SharedSite } from './ShareSiteDialog';
+import { SiteIcon } from './SiteIcon';
+
+const POLL_MS = 4000;
+const GROUP_WINDOW_MS = 5 * 60 * 1000;
+const NEAR_BOTTOM_PX = 120;
+
+export interface ChatThreadProps {
+  /** API path for this thread's messages, e.g. "/community/messages" or "/rooms/<id>/messages". */
+  endpoint: string;
+  currentUserId: string;
+  header: ReactNode;
+  placeholder: string;
+  footnote: string;
+  emptyState: { title: string; body: string };
+  /** Shown when the server says the database tables are missing. */
+  setupHint: ReactNode;
+  /** Called after a shared site is saved, so the link list can refresh. */
+  onLinkSaved: () => void;
+  /** Called whenever newer messages are shown (first load, polling, sending), e.g. to mark a room read. */
+  onSeen?: () => void;
+  /** Called when the server says this thread is no longer yours (removed from a room, room deleted). */
+  onGone?: () => void;
+}
+
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', weekday: 'short' });
+
+function dayLabel(date: Date) {
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return dateFormat.format(date);
+}
+
+type ApiError = { response?: { status?: number; data?: { error?: string } } };
+
+function errorMessage(error: unknown, fallback: string) {
+  return (error as ApiError)?.response?.data?.error || fallback;
+}
+
+function isSetupRequired(error: unknown) {
+  return (error as ApiError)?.response?.data?.error === 'setup_required';
+}
+
+function isGone(error: unknown) {
+  const status = (error as ApiError)?.response?.status;
+  return status === 403 || status === 404;
+}
+
+function SharedSiteCard({ message, canSave, onSave }: { message: ChatMessage; canSave: boolean; onSave: () => void }) {
+  if (!message.linkUrl) return null;
+  const iconButton =
+    'flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground';
+  return (
+    <div className="mt-1.5 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-2.5 pr-2 shadow-card">
+      <SiteIcon url={message.linkUrl} />
+      <a href={message.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="min-w-0 flex-1 outline-none focus-visible:underline">
+        <span className="block truncate text-[13px] font-semibold">{message.linkTitle || hostnameOf(message.linkUrl)}</span>
+        <span className="block truncate text-xs text-muted-foreground">{hostnameOf(message.linkUrl)}</span>
+      </a>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {canSave && (
+          <button type="button" onClick={onSave} title="Save to my links" aria-label="Save to my links" className={iconButton}>
+            <BookmarkPlus className="size-4" />
+          </button>
+        )}
+        <a href={message.linkUrl} target="_blank" rel="noopener noreferrer nofollow" title="Open" aria-label="Open site" className={iconButton}>
+          <ExternalLink className="size-4" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+export function ChatThread({
+  endpoint,
+  currentUserId,
+  header,
+  placeholder,
+  footnote,
+  emptyState,
+  setupHint,
+  onLinkSaved,
+  onSeen,
+  onGone,
+}: ChatThreadProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [text, setText] = useState('');
+  const [attachment, setAttachment] = useState<SharedSite | null>(null);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [hasUnseen, setHasUnseen] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastCreatedAt = useRef<string | null>(null);
+  // How to adjust the scroll after the next render: stick to the bottom, or keep place after loading older messages.
+  const pendingScroll = useRef<{ type: 'bottom' } | { type: 'keep'; previousHeight: number } | null>(null);
+  const callbacks = useRef({ onSeen, onGone });
+  callbacks.current = { onSeen, onGone };
+
+  const isNearBottom = () => {
+    const el = scrollRef.current;
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+  };
+
+  /**
+   * Adds messages not seen yet, keeping time order. Only polling advances the cursor: a message we
+   * just sent must not make the next poll skip someone else's message written a moment earlier.
+   */
+  const mergeNewer = useCallback((incoming: ChatMessage[], advanceCursor = true) => {
+    if (incoming.length === 0) return;
+    setMessages((current) => {
+      const known = new Set(current.map((m) => m.id));
+      const fresh = incoming.filter((m) => !known.has(m.id));
+      if (fresh.length === 0) return current;
+      return [...current, ...fresh].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    });
+    if (advanceCursor) lastCreatedAt.current = incoming[incoming.length - 1].createdAt;
+  }, []);
+
+  const handleFailure = useCallback((error: unknown, fallback: string) => {
+    if (isSetupRequired(error)) setNeedsSetup(true);
+    else if (isGone(error)) callbacks.current.onGone?.();
+    else toast.error(errorMessage(error, fallback));
+  }, []);
+
+  // First page.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get(endpoint)
+      .then((response) => {
+        if (cancelled) return;
+        const page: ChatMessage[] = response.data.messages || [];
+        setMessages(page);
+        setHasMore(Boolean(response.data.hasMore));
+        lastCreatedAt.current = page.length ? page[page.length - 1].createdAt : new Date(0).toISOString();
+        pendingScroll.current = { type: 'bottom' };
+        callbacks.current.onSeen?.();
+      })
+      .catch((error) => !cancelled && handleFailure(error, 'Could not load messages'))
+      .finally(() => !cancelled && setIsLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [endpoint, handleFailure]);
+
+  // Check for new messages every few seconds while the page is visible.
+  const pollNewer = useCallback(async () => {
+    if (!lastCreatedAt.current || document.hidden) return;
+    try {
+      const response = await api.get(endpoint, { params: { after: lastCreatedAt.current } });
+      const incoming: ChatMessage[] = response.data.messages || [];
+      if (incoming.length === 0) return;
+      if (isNearBottom()) pendingScroll.current = { type: 'bottom' };
+      else setHasUnseen(true);
+      mergeNewer(incoming);
+      callbacks.current.onSeen?.();
+    } catch (error) {
+      // A missed poll is fine; the next one catches up. Leaving a room is not.
+      if (isGone(error)) callbacks.current.onGone?.();
+    }
+  }, [endpoint, mergeNewer]);
+
+  useEffect(() => {
+    if (needsSetup) return;
+    const timer = window.setInterval(pollNewer, POLL_MS);
+    window.addEventListener('focus', pollNewer);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', pollNewer);
+    };
+  }, [pollNewer, needsSetup]);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const pending = pendingScroll.current;
+    if (!el || !pending) return;
+    if (pending.type === 'bottom') {
+      el.scrollTop = el.scrollHeight;
+      setHasUnseen(false);
+    } else {
+      el.scrollTop += el.scrollHeight - pending.previousHeight;
+    }
+    pendingScroll.current = null;
+  }, [messages]);
+
+  const loadEarlier = async () => {
+    if (!messages.length) return;
+    setIsLoadingEarlier(true);
+    try {
+      const response = await api.get(endpoint, { params: { before: messages[0].createdAt } });
+      const older: ChatMessage[] = response.data.messages || [];
+      pendingScroll.current = { type: 'keep', previousHeight: scrollRef.current?.scrollHeight ?? 0 };
+      setMessages((current) => [...older, ...current]);
+      setHasMore(Boolean(response.data.hasMore));
+    } catch (error) {
+      handleFailure(error, 'Could not load earlier messages');
+    } finally {
+      setIsLoadingEarlier(false);
+    }
+  };
+
+  const send = async () => {
+    const body = text.trim();
+    if ((!body && !attachment) || isSending) return;
+    setIsSending(true);
+    try {
+      const response = await api.post(endpoint, { body, linkUrl: attachment?.url, linkTitle: attachment?.title });
+      pendingScroll.current = { type: 'bottom' };
+      mergeNewer([response.data.message], false);
+      setText('');
+      setAttachment(null);
+      textareaRef.current?.focus();
+      callbacks.current.onSeen?.();
+    } catch (error) {
+      handleFailure(error, 'Could not send the message');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const remove = async (message: ChatMessage) => {
+    if (!window.confirm('Delete this message for everyone?')) return;
+    try {
+      await api.delete(`${endpoint}/${message.id}`);
+      setMessages((current) => current.filter((m) => m.id !== message.id));
+    } catch (error) {
+      handleFailure(error, 'Could not delete the message');
+    }
+  };
+
+  const saveSite = async (message: ChatMessage) => {
+    if (!message.linkUrl) return;
+    try {
+      await api.post('/links', { title: message.linkTitle || hostnameOf(message.linkUrl), url: message.linkUrl, categoryId: null });
+      toast.success('Saved to your Inbox');
+      onLinkSaved();
+    } catch (error) {
+      const status = (error as ApiError)?.response?.status;
+      if (status === 409) toast.message('Already in your links');
+      else toast.error('Could not save the site');
+    }
+  };
+
+  // Grow the textarea with its content, up to a few lines.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
+
+  const remaining = MESSAGE_MAX_LENGTH - text.length;
+  const canSend = (text.trim().length > 0 || attachment !== null) && remaining >= 0 && !isSending && !needsSetup;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {header}
+
+      <div ref={scrollRef} className="custom-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8">
+        {isLoading && (
+          <div className="flex h-full items-center justify-center">
+            <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-label="Loading" />
+          </div>
+        )}
+
+        {!isLoading && needsSetup && (
+          <div className="mx-auto mt-16 max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-card">
+            <h2 className="text-[15px] font-semibold">This isn&apos;t set up yet</h2>
+            <p className="mt-2 text-sm text-muted-foreground">{setupHint}</p>
+          </div>
+        )}
+
+        {!isLoading && !needsSetup && messages.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <h2 className="text-[15px] font-semibold">{emptyState.title}</h2>
+            <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">{emptyState.body}</p>
+          </div>
+        )}
+
+        {!isLoading && !needsSetup && messages.length > 0 && (
+          <div className="mx-auto max-w-3xl">
+            {hasMore && (
+              <div className="mb-4 flex justify-center">
+                <Button variant="outline" size="sm" onClick={loadEarlier} disabled={isLoadingEarlier}>
+                  {isLoadingEarlier ? 'Loading…' : 'Load earlier messages'}
+                </Button>
+              </div>
+            )}
+
+            {messages.map((message, index) => {
+              const previous = messages[index - 1];
+              const date = new Date(message.createdAt);
+              const newDay = !previous || new Date(previous.createdAt).toDateString() !== date.toDateString();
+              const dayDivider = newDay && (
+                <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  {dayLabel(date)}
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              );
+
+              if (message.kind === 'system') {
+                return (
+                  <div key={message.id}>
+                    {dayDivider}
+                    <p className="my-3 text-center text-xs text-muted-foreground">{message.body}</p>
+                  </div>
+                );
+              }
+
+              const continues =
+                !newDay &&
+                previous.kind !== 'system' &&
+                previous.userId === message.userId &&
+                date.getTime() - new Date(previous.createdAt).getTime() < GROUP_WINDOW_MS;
+              const isMine = message.userId === currentUserId;
+
+              return (
+                <div key={message.id}>
+                  {dayDivider}
+                  <div className={`group relative flex gap-3 rounded-lg px-2 py-1 hover:bg-accent/50 ${continues ? '' : 'mt-3'}`}>
+                    <div className="w-8 shrink-0">
+                      {!continues && (
+                        <div
+                          className={`flex size-8 items-center justify-center rounded-full text-xs font-semibold ${
+                            isMine ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {message.authorHandle.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {!continues && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[13px] font-semibold">{message.authorHandle}</span>
+                          {isMine && <span className="text-[11px] text-muted-foreground">you</span>}
+                          <time className="text-[11px] text-muted-foreground" dateTime={message.createdAt}>
+                            {timeFormat.format(date)}
+                          </time>
+                        </div>
+                      )}
+                      {message.body && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>}
+                      <SharedSiteCard message={message} canSave={!isMine} onSave={() => saveSite(message)} />
+                    </div>
+                    {isMine && (
+                      <button
+                        type="button"
+                        onClick={() => remove(message)}
+                        aria-label="Delete message"
+                        title="Delete"
+                        className="absolute right-2 top-1 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {hasUnseen && (
+        <div className="pointer-events-none relative">
+          <button
+            type="button"
+            onClick={() => {
+              const el = scrollRef.current;
+              if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+              setHasUnseen(false);
+            }}
+            className="pointer-events-auto absolute -top-12 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-raised"
+          >
+            <ArrowDown className="size-3.5" />
+            New messages
+          </button>
+        </div>
+      )}
+
+      <div className="shrink-0 border-t border-border/80 bg-background/85 px-4 py-3 backdrop-blur-md md:px-8">
+        <div className="mx-auto max-w-3xl">
+          {attachment && (
+            <div className="mb-2 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-2 pr-1.5 shadow-card">
+              <SiteIcon url={attachment.url} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium">{attachment.title}</span>
+                <span className="block truncate text-xs text-muted-foreground">{hostnameOf(attachment.url)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setAttachment(null)}
+                aria-label="Remove attached site"
+                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              send();
+            }}
+            className="flex items-end gap-1.5 rounded-xl border border-input bg-card p-1.5 shadow-card transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/20"
+          >
+            <button
+              type="button"
+              onClick={() => setIsShareOpen(true)}
+              disabled={needsSetup}
+              aria-label="Share a site"
+              title="Share a site"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            >
+              <Link2 className="size-[18px]" />
+            </button>
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              disabled={needsSetup}
+              placeholder={placeholder}
+              aria-label="Message"
+              className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground"
+            />
+            <Button type="submit" size="icon" disabled={!canSend} aria-label="Send" className="size-9 shrink-0">
+              <SendHorizontal className="size-4" />
+            </Button>
+          </form>
+          <div className="mt-1.5 flex justify-between gap-3 px-1 text-[11px] text-muted-foreground">
+            <span>{footnote}</span>
+            {remaining < 200 && <span className={`tabular-nums ${remaining < 0 ? 'text-destructive' : ''}`}>{remaining}</span>}
+          </div>
+        </div>
+      </div>
+
+      <ShareSiteDialog open={isShareOpen} onOpenChange={setIsShareOpen} onPick={setAttachment} />
+    </div>
+  );
+}

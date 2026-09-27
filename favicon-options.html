@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Collector Favicon Options</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #161719;
+    --panel: #222326;
+    --panel-soft: #2a2b2f;
+    --line: #3a3b40;
+    --text: #f3f4f2;
+    --muted: #a7aaa4;
+    --blue: #0a84ff;
+    --green: #34c759;
+    --amber: #ffb340;
+    --red: #ff453a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.04), transparent 260px),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    padding: 34px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: end;
+    max-width: 1240px;
+    margin: 0 auto 28px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 24px;
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(28px, 4vw, 46px);
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .count {
+    min-width: 104px;
+    text-align: right;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .grid {
+    max-width: 1240px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+
+  .card {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color .16s ease, transform .16s ease, background .16s ease;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+    background: var(--panel-soft);
+    border-color: color-mix(in srgb, var(--accent), white 20%);
+  }
+
+  .card.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent), transparent 25%);
+  }
+
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 12px;
+  }
+
+  .number {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .selected-mark {
+    opacity: 0;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .card.selected .selected-mark { opacity: 1; }
+
+  .icon-stage {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 14px;
+    align-items: center;
+    margin-top: 12px;
+  }
+
+  .icon-box {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
+    background: #303136;
+    display: grid;
+    place-items: center;
+  }
+
+  svg.mark {
+    width: 48px;
+    height: 48px;
+    display: block;
+  }
+
+  .title {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .desc {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .sizes {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .sizes span {
+    color: var(--muted);
+    font-size: 11px;
+    width: 34px;
+  }
+
+  .mini {
+    display: grid;
+    place-items: center;
+    background: #303136;
+    border-radius: 6px;
+  }
+
+  .mini svg { display: block; }
+  .s16 { width: 16px; height: 16px; border-radius: 4px; }
+  .s32 { width: 32px; height: 32px; border-radius: 7px; }
+  .s64 { width: 64px; height: 64px; border-radius: 14px; }
+
+  .preview {
+    max-width: 1240px;
+    margin: 22px auto 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .mock {
+    background: #202124;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .mock.light {
+    color: #1d1d1f;
+    background: #f5f5f7;
+    border-color: #d7d7dc;
+  }
+
+  .mock-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: #303136;
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .mock.light .mock-icon { background: #e7e7ec; }
+
+  .mock strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  .mock small {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .mock.light small { color: #74777d; }
+
+  @media (max-width: 720px) {
+    body { padding: 20px; }
+    header { display: block; }
+    .count { text-align: left; margin-top: 14px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Fallback Favicon Set</h1>
+    <p>Click any option to mark candidates. Each design is built as inline SVG so it can be converted into app assets later.</p>
+  </div>
+  <div class="count"><span id="selectedCount">0</span> selected / 20</div>
+</header>
+
+<main class="grid" id="grid"></main>
+
+<section class="preview">
+  <div class="mock">
+    <div class="mock-icon" id="darkPreview"></div>
+    <div>
+      <strong>Dark card preview</strong>
+      <small>Default favicon when a site has no icon</small>
+    </div>
+  </div>
+  <div class="mock light">
+    <div class="mock-icon" id="lightPreview"></div>
+    <div>
+      <strong>Light card preview</strong>
+      <small>Same asset on a light background</small>
+    </div>
+  </div>
+</section>
+
+<script>
+const icons = [
+  { name: "Bookmark Core", accent: "#0a84ff", desc: "Safe default for saved websites.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#172033"/><path d="M20 16h24a4 4 0 0 1 4 4v31L32 42 16 51V20a4 4 0 0 1 4-4z" fill="#0a84ff"/><path d="M24 23h16M24 30h11" stroke="#eaf4ff" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { name: "Quiet Globe", accent: "#34c759", desc: "Generic web icon with a calm signal.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#14231a"/><circle cx="32" cy="32" r="19" fill="#34c759"/><path d="M13 32h38M32 13c7 7 7 31 0 38M32 13c-7 7-7 31 0 38" stroke="#092512" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { name: "Link Spark", accent: "#ffb340", desc: "For unknown links with energy.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#2a2112"/><path d="M41 19H29a3.5 3.5 0 0 0 0 7h3.55L21.5 37.05a3.54 3.54 0 0 0 5 5L37.55 31V34.5a3.5 3.5 0 0 0 7 0v-12A3.5 3.5 0 0 0 41 19z" fill="#ffb340"/><path d="M19 45h26" stroke="#fff1d8" stroke-width="5" stroke-linecap="round"/></svg>` },
+  { name: "Soft Folder", accent: "#ffcc00", desc: "Good for uncategorized local-like items.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#2b250f"/><path d="M12 24a6 6 0 0 1 6-6h11l5 6h12a6 6 0 0 1 6 6v18H12V24z" fill="#ffd43b"/><path d="M12 30h40v16a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V30z" fill="#ffb340"/></svg>` },
+  { name: "Compass Dot", accent: "#5ac8fa", desc: "Navigation metaphor for web shortcuts.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#10242c"/><circle cx="32" cy="32" r="20" fill="#5ac8fa"/><path d="M39 18l-5 17-16 11 5-17 16-11z" fill="#083241"/><circle cx="32" cy="32" r="4" fill="#e9fbff"/></svg>` },
+  { name: "Stacked Pages", accent: "#af52de", desc: "Feels like collected resources.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#24142d"/><rect x="18" y="14" width="30" height="38" rx="6" fill="#6d2e8f"/><rect x="14" y="18" width="30" height="38" rx="6" fill="#af52de"/><path d="M22 29h14M22 37h10" stroke="#f8e7ff" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { name: "Pinboard", accent: "#ff2d55", desc: "Bookmark as pinned reference.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#2b1218"/><path d="M22 16h20l-4 17 9 9-15 3-15-3 9-9-4-17z" fill="#ff2d55"/><path d="M32 44v9" stroke="#ffd9e1" stroke-width="5" stroke-linecap="round"/></svg>` },
+  { name: "Tiny Window", accent: "#8e8e93", desc: "Neutral app/window fallback.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#202124"/><rect x="14" y="18" width="36" height="30" rx="6" fill="#8e8e93"/><circle cx="21" cy="25" r="2.5" fill="#ff453a"/><circle cx="29" cy="25" r="2.5" fill="#ffcc00"/><circle cx="37" cy="25" r="2.5" fill="#34c759"/><path d="M20 35h24" stroke="#f2f2f7" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { name: "North Star", accent: "#ffffff", desc: "Minimal, clear, high-contrast.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#1f2023"/><path d="M32 10l6 16 16 6-16 6-6 16-6-16-16-6 16-6 6-16z" fill="#ffffff"/><circle cx="32" cy="32" r="5" fill="#0a84ff"/></svg>` },
+  { name: "Collector Grid", accent: "#00c7be", desc: "Collection system identity.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#112725"/><g fill="#00c7be"><rect x="16" y="16" width="13" height="13" rx="4"/><rect x="35" y="16" width="13" height="13" rx="4"/><rect x="16" y="35" width="13" height="13" rx="4"/><rect x="35" y="35" width="13" height="13" rx="4"/></g></svg>` },
+  { name: "Paper Plane", accent: "#64d2ff", desc: "Open and go quickly.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#10212d"/><path d="M12 30l40-16-16 40-7-17-17-7z" fill="#64d2ff"/><path d="M29 37l23-23" stroke="#073246" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { name: "Command Tile", accent: "#30d158", desc: "Useful for tool/developer links.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#121f16"/><rect x="14" y="18" width="36" height="28" rx="7" fill="#30d158"/><path d="M22 28l6 4-6 4M33 38h10" stroke="#082312" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>` },
+  { name: "Archive Box", accent: "#ac8e68", desc: "Warm, quiet fallback for saved items.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#2a2119"/><path d="M15 24h34v24a6 6 0 0 1-6 6H21a6 6 0 0 1-6-6V24z" fill="#ac8e68"/><path d="M12 17h40v11H12z" fill="#d2ad7f"/><path d="M26 34h12" stroke="#fff3df" stroke-width="4" stroke-linecap="round"/></svg>` },
+  { name: "Pulse Bolt", accent: "#ff9500", desc: "Clear signal when favicon is missing.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#291b0b"/><path d="M36 8L16 35h15l-3 21 20-28H34l2-20z" fill="#ff9500"/></svg>` },
+  { name: "Layered Ring", accent: "#5856d6", desc: "Abstract, polished, app-like.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#171737"/><circle cx="28" cy="28" r="15" fill="#5856d6"/><circle cx="38" cy="36" r="15" fill="#7d7aff" fill-opacity=".72"/><circle cx="33" cy="32" r="8" fill="#f3f2ff"/></svg>` },
+  { name: "Search Lens", accent: "#40c8e0", desc: "Good for unknown web destinations.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#11262b"/><circle cx="29" cy="29" r="14" fill="none" stroke="#40c8e0" stroke-width="8"/><path d="M40 40l10 10" stroke="#e8fbff" stroke-width="7" stroke-linecap="round"/></svg>` },
+  { name: "Route Flag", accent: "#ff6b6b", desc: "Shortcut destination marker.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#2b1515"/><path d="M20 52V13" stroke="#ffdede" stroke-width="6" stroke-linecap="round"/><path d="M23 14h25l-6 10 6 10H23V14z" fill="#ff6b6b"/></svg>` },
+  { name: "Clean W", accent: "#0a84ff", desc: "Brand-leaning Web Collector fallback.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#121f31"/><path d="M14 20l8 26 10-18 10 18 8-26" fill="none" stroke="#0a84ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>` },
+  { name: "Gem Link", accent: "#bf5af2", desc: "Premium-looking unknown site icon.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#25142f"/><path d="M20 14h24l10 14-22 24-22-24 10-14z" fill="#bf5af2"/><path d="M20 14l12 38 12-38M10 28h44" stroke="#f7e6ff" stroke-width="3" stroke-linejoin="round"/></svg>` },
+  { name: "Quiet Initial", accent: "#a1a1aa", desc: "Simple letter-style placeholder.", svg: `
+    <svg class="mark" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#242529"/><circle cx="32" cy="32" r="20" fill="#3a3b40"/><path d="M21 23l5 18 6-12 6 12 5-18" fill="none" stroke="#f5f5f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>` }
+];
+
+const grid = document.getElementById("grid");
+const selectedCount = document.getElementById("selectedCount");
+const darkPreview = document.getElementById("darkPreview");
+const lightPreview = document.getElementById("lightPreview");
+const selected = new Set();
+
+function mini(svg, size) {
+  return svg.replace('class="mark"', `width="${size}" height="${size}"`);
+}
+
+function refreshCount() {
+  selectedCount.textContent = selected.size;
+}
+
+function setPreview(icon) {
+  darkPreview.innerHTML = mini(icon.svg, 30);
+  lightPreview.innerHTML = mini(icon.svg, 30);
+}
+
+icons.forEach((icon, index) => {
+  const card = document.createElement("article");
+  card.className = "card";
+  card.style.setProperty("--accent", icon.accent);
+  card.innerHTML = `
+    <div class="top">
+      <div class="number">#${String(index + 1).padStart(2, "0")}</div>
+      <div class="selected-mark">selected</div>
+    </div>
+    <div class="icon-stage">
+      <div class="icon-box">${icon.svg}</div>
+      <div>
+        <div class="title">${icon.name}</div>
+        <div class="desc">${icon.desc}</div>
+      </div>
+    </div>
+    <div class="sizes">
+      <span>sizes</span>
+      <div class="mini s16">${mini(icon.svg, 16)}</div>
+      <div class="mini s32">${mini(icon.svg, 32)}</div>
+      <div class="mini s64">${mini(icon.svg, 64)}</div>
+    </div>
+  `;
+  card.addEventListener("click", () => {
+    const id = index + 1;
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    card.classList.toggle("selected", selected.has(id));
+    setPreview(icon);
+    refreshCount();
+  });
+  grid.appendChild(card);
+});
+
+setPreview(icons[0]);
+</script>
+</body>
+</html>

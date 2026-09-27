@@ -1,0 +1,79 @@
+appId: com.webcollector.app
+productName: Web Collector
+copyright: Copyright 2026
+
+directories:
+  output: dist-installer
+  buildResources: resources
+
+artifactName: Web-Collector-Setup-${version}.${ext}
+
+files:
+  - dist-electron/**/*
+  - "!node_modules/**/*"
+  - node_modules/electron-updater/**/*
+  - node_modules/electron-updater/node_modules/**/*
+  - node_modules/builder-util-runtime/**/*
+  - node_modules/debug/**/*
+  - node_modules/ms/**/*
+  - node_modules/sax/**/*
+  - node_modules/js-yaml/**/*
+  - node_modules/argparse/**/*
+  - node_modules/fs-extra/**/*
+  - node_modules/jsonfile/**/*
+  - node_modules/universalify/**/*
+  - node_modules/graceful-fs/**/*
+  - node_modules/semver/**/*
+  - node_modules/lazy-val/**/*
+  - node_modules/lodash.escaperegexp/**/*
+  - node_modules/lodash.isequal/**/*
+  - node_modules/tiny-typed-emitter/**/*
+
+extraResources:
+  - from: .next/standalone
+    to: standalone
+    filter:
+      - "**/*"
+  - from: .next/standalone/node_modules
+    to: standalone/node_modules
+    filter:
+      - "**/*"
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/tray-icon.png
+    to: tray-icon.png
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.ico
+
+mac:
+  target:
+    - dmg
+    - zip
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+  identity: "-"
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: Web-Collector-${version}-mac-${arch}.${ext}
+
+publish:
+  provider: github
+  owner: huckwnmo99
+  repo: Collector_program_update
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Web Collector
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
+  installerSidebar: installer-sidebar.bmp
+  uninstallerSidebar: installer-sidebar.bmp

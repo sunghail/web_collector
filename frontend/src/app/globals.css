@@ -1,0 +1,446 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-surface: var(--surface);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+/* ========================================
+   One calm neutral system, light + dark.
+   The accent color is the only thing a user picks (html[data-accent]).
+   ======================================== */
+
+:root {
+  --radius: 0.625rem;
+
+  --background: #f6f6f4;
+  --foreground: #1a1a19;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #1a1a19;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a19;
+  --secondary: #ededea;
+  --secondary-foreground: #1a1a19;
+  --muted: #efefec;
+  --muted-foreground: #6b6a65;
+  --accent: #ededea;
+  --accent-foreground: #1a1a19;
+  --destructive: #d93a2b;
+  --border: #e3e2de;
+  --input: #dddcd7;
+
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --ring: var(--primary);
+
+  --sidebar: #efefec;
+  --sidebar-foreground: #1a1a19;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: rgba(26, 26, 25, 0.05);
+  --sidebar-accent-foreground: #1a1a19;
+  --sidebar-border: #e3e2de;
+  --sidebar-ring: var(--primary);
+
+  --chart-1: #2563eb;
+  --chart-2: #16a34a;
+  --chart-3: #7c3aed;
+  --chart-4: #e11d48;
+  --chart-5: #0891b2;
+
+  --shadow-card: 0 1px 2px rgba(20, 20, 18, 0.04), 0 1px 1px rgba(20, 20, 18, 0.03);
+  --shadow-raised: 0 8px 24px -8px rgba(20, 20, 18, 0.16), 0 2px 6px rgba(20, 20, 18, 0.05);
+}
+
+.dark {
+  --background: #111112;
+  --foreground: #ededec;
+  --surface: #1a1a1c;
+  --card: #1a1a1c;
+  --card-foreground: #ededec;
+  --popover: #1e1e20;
+  --popover-foreground: #ededec;
+  --secondary: #252528;
+  --secondary-foreground: #ededec;
+  --muted: #232326;
+  --muted-foreground: #9b9b97;
+  --accent: #252528;
+  --accent-foreground: #ededec;
+  --destructive: #ff5a4c;
+  --border: #2a2a2d;
+  --input: #323236;
+
+  --primary: #4b8bff;
+  --primary-foreground: #ffffff;
+
+  --sidebar: #151517;
+  --sidebar-foreground: #ededec;
+  --sidebar-accent: rgba(237, 237, 236, 0.06);
+  --sidebar-accent-foreground: #ededec;
+  --sidebar-border: #26262a;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-raised: 0 12px 32px -10px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Accent colors. Each pair is tuned so white text on it stays readable. */
+html[data-accent="graphite"] { --primary: #2f2f33; --primary-foreground: #ffffff; }
+html[data-accent="graphite"].dark { --primary: #e6e6e3; --primary-foreground: #18181a; }
+html[data-accent="green"] { --primary: #15803d; }
+html[data-accent="green"].dark { --primary: #2fb75c; --primary-foreground: #0b1a10; }
+html[data-accent="orange"] { --primary: #d9480f; }
+html[data-accent="orange"].dark { --primary: #ff8a3d; --primary-foreground: #1f0f04; }
+html[data-accent="violet"] { --primary: #6d3fe0; }
+html[data-accent="violet"].dark { --primary: #a58bff; --primary-foreground: #160d33; }
+html[data-accent="rose"] { --primary: #d61f4f; }
+html[data-accent="rose"].dark { --primary: #ff6b8e; --primary-foreground: #2a0712; }
+
+/* ========================================
+   Styles (html[data-style]). Each only swaps the neutrals and corner radius,
+   so any accent works with any style.
+   ======================================== */
+
+/* macOS: crisp system grays, rounder corners */
+html[data-style="macos"] {
+  --radius: 0.75rem;
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --secondary: #ebebef;
+  --secondary-foreground: #1d1d1f;
+  --muted: #ededf0;
+  --muted-foreground: #6e6e73;
+  --accent: #ebebef;
+  --accent-foreground: #1d1d1f;
+  --border: #d9d9de;
+  --input: #d2d2d7;
+  --sidebar: #e8e8ec;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-accent: rgba(0, 0, 0, 0.055);
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #d9d9de;
+}
+html[data-style="macos"].dark {
+  --background: #1c1c1e;
+  --foreground: #f5f5f7;
+  --surface: #2c2c2e;
+  --card: #2c2c2e;
+  --card-foreground: #f5f5f7;
+  --popover: #2c2c2e;
+  --popover-foreground: #f5f5f7;
+  --secondary: #3a3a3c;
+  --secondary-foreground: #f5f5f7;
+  --muted: #3a3a3c;
+  --muted-foreground: #98989d;
+  --accent: #3a3a3c;
+  --accent-foreground: #f5f5f7;
+  --border: #3a3a3c;
+  --input: #48484a;
+  --sidebar: #232325;
+  --sidebar-foreground: #f5f5f7;
+  --sidebar-accent: rgba(255, 255, 255, 0.07);
+  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-border: #333336;
+}
+
+/* Notion: flat paper, hairlines instead of shadows, tight corners */
+html[data-style="notion"] {
+  --radius: 0.375rem;
+  --background: #ffffff;
+  --foreground: #37352f;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #37352f;
+  --popover: #ffffff;
+  --popover-foreground: #37352f;
+  --secondary: #f1f1ef;
+  --secondary-foreground: #37352f;
+  --muted: #f1f1ef;
+  --muted-foreground: #787774;
+  --accent: #f1f1ef;
+  --accent-foreground: #37352f;
+  --border: #e9e9e7;
+  --input: #e3e2e0;
+  --sidebar: #f7f7f5;
+  --sidebar-foreground: #37352f;
+  --sidebar-accent: rgba(55, 53, 47, 0.06);
+  --sidebar-accent-foreground: #37352f;
+  --sidebar-border: #ededeb;
+  --shadow-card: 0 0 0 transparent;
+  --shadow-raised: 0 4px 16px -4px rgba(15, 15, 15, 0.12), 0 0 0 1px rgba(15, 15, 15, 0.04);
+}
+html[data-style="notion"].dark {
+  --background: #191919;
+  --foreground: #e6e6e5;
+  --surface: #202020;
+  --card: #202020;
+  --card-foreground: #e6e6e5;
+  --popover: #252525;
+  --popover-foreground: #e6e6e5;
+  --secondary: #2f2f2f;
+  --secondary-foreground: #e6e6e5;
+  --muted: #2f2f2f;
+  --muted-foreground: #9b9b9b;
+  --accent: #2f2f2f;
+  --accent-foreground: #e6e6e5;
+  --border: #2f2f2f;
+  --input: #373737;
+  --sidebar: #202020;
+  --sidebar-foreground: #e6e6e5;
+  --sidebar-accent: rgba(255, 255, 255, 0.055);
+  --sidebar-accent-foreground: #e6e6e5;
+  --sidebar-border: #2a2a2a;
+  --shadow-card: 0 0 0 transparent;
+  --shadow-raised: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* Glass: lavender light behind frosted, see-through surfaces */
+html[data-style="glass"] {
+  --radius: 0.875rem;
+  --background: #efeaf9;
+  --foreground: #221d33;
+  --surface: rgba(255, 255, 255, 0.7);
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #221d33;
+  --popover: rgba(252, 250, 255, 0.94);
+  --popover-foreground: #221d33;
+  --secondary: rgba(110, 90, 180, 0.09);
+  --secondary-foreground: #221d33;
+  --muted: rgba(110, 90, 180, 0.08);
+  --muted-foreground: #625c7a;
+  --accent: rgba(110, 90, 180, 0.1);
+  --accent-foreground: #221d33;
+  --border: rgba(110, 90, 180, 0.18);
+  --input: rgba(110, 90, 180, 0.24);
+  --sidebar: rgba(255, 255, 255, 0.5);
+  --sidebar-foreground: #221d33;
+  --sidebar-accent: rgba(110, 90, 180, 0.09);
+  --sidebar-accent-foreground: #221d33;
+  --sidebar-border: rgba(110, 90, 180, 0.16);
+  --shadow-card: 0 1px 2px rgba(60, 40, 120, 0.06), 0 4px 12px -6px rgba(60, 40, 120, 0.12);
+  --shadow-raised: 0 16px 40px -12px rgba(60, 40, 120, 0.3), 0 2px 6px rgba(60, 40, 120, 0.08);
+}
+html[data-style="glass"].dark {
+  --background: #15121f;
+  --foreground: #eeeaf7;
+  --surface: rgba(44, 37, 66, 0.6);
+  --card: rgba(44, 37, 66, 0.55);
+  --card-foreground: #eeeaf7;
+  --popover: rgba(34, 29, 52, 0.94);
+  --popover-foreground: #eeeaf7;
+  --secondary: rgba(190, 170, 255, 0.1);
+  --secondary-foreground: #eeeaf7;
+  --muted: rgba(190, 170, 255, 0.08);
+  --muted-foreground: #a7a1bd;
+  --accent: rgba(190, 170, 255, 0.1);
+  --accent-foreground: #eeeaf7;
+  --border: rgba(190, 170, 255, 0.13);
+  --input: rgba(190, 170, 255, 0.18);
+  --sidebar: rgba(30, 25, 46, 0.55);
+  --sidebar-foreground: #eeeaf7;
+  --sidebar-accent: rgba(190, 170, 255, 0.08);
+  --sidebar-accent-foreground: #eeeaf7;
+  --sidebar-border: rgba(190, 170, 255, 0.1);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-raised: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+}
+html[data-style="glass"] body {
+  background-image:
+    radial-gradient(60rem 40rem at 10% -10%, rgba(150, 120, 255, 0.22), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, rgba(90, 170, 255, 0.16), transparent 60%);
+  background-attachment: fixed;
+}
+html[data-style="glass"].dark body {
+  background-image:
+    radial-gradient(60rem 40rem at 10% -10%, rgba(130, 90, 255, 0.2), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, rgba(60, 120, 255, 0.12), transparent 60%);
+}
+/* Let the page show through the frosted surfaces. */
+html[data-style="glass"] :where(.bg-background) {
+  background-color: transparent;
+}
+html[data-style="glass"] :where(.bg-card, .bg-popover, .bg-sidebar, .bg-background\/85) {
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+}
+
+/* Dashboard: cool slate grays, tight corners */
+html[data-style="dashboard"] {
+  --radius: 0.5rem;
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --surface: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --secondary: #e2e8f0;
+  --secondary-foreground: #0f172a;
+  --muted: #e8edf3;
+  --muted-foreground: #56657a;
+  --accent: #e2e8f0;
+  --accent-foreground: #0f172a;
+  --border: #dbe2ea;
+  --input: #cfd8e3;
+  --sidebar: #e6ecf3;
+  --sidebar-foreground: #0f172a;
+  --sidebar-accent: rgba(15, 23, 42, 0.06);
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #d5dde7;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+html[data-style="dashboard"].dark {
+  --background: #0b1220;
+  --foreground: #e6edf6;
+  --surface: #111a2e;
+  --card: #111a2e;
+  --card-foreground: #e6edf6;
+  --popover: #131d33;
+  --popover-foreground: #e6edf6;
+  --secondary: #1b2640;
+  --secondary-foreground: #e6edf6;
+  --muted: #1b2640;
+  --muted-foreground: #8fa0b8;
+  --accent: #1b2640;
+  --accent-foreground: #e6edf6;
+  --border: #1e2a44;
+  --input: #26344f;
+  --sidebar: #0e1628;
+  --sidebar-foreground: #e6edf6;
+  --sidebar-accent: rgba(230, 237, 246, 0.06);
+  --sidebar-accent-foreground: #e6edf6;
+  --sidebar-border: #1a2540;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ========================================
+   Base
+   ======================================== */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    font-size: 16px;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "ss01", "tnum" 0;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  kbd {
+    font-family: var(--font-sans);
+  }
+}
+
+/* ========================================
+   Utilities
+   ======================================== */
+
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+.shadow-raised {
+  box-shadow: var(--shadow-raised);
+}
+
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+.fade-in {
+  animation: fadeIn 0.35s ease-out both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: content-box;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: inherit;
+}

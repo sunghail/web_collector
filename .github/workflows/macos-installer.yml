@@ -1,0 +1,152 @@
+name: Build Desktop Installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish assets to Collector_program_update release
+        required: true
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create app environment file
+        working-directory: frontend
+        shell: pwsh
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          $required = @('NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET')
+          $missing = $required | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+          if ($missing) {
+            throw "Missing required secrets: $($missing -join ', ')"
+          }
+          @(
+            "NEXT_PUBLIC_SUPABASE_URL=$env:NEXT_PUBLIC_SUPABASE_URL"
+            "NEXT_PUBLIC_SUPABASE_ANON_KEY=$env:NEXT_PUBLIC_SUPABASE_ANON_KEY"
+            "SUPABASE_SERVICE_ROLE_KEY=$env:SUPABASE_SERVICE_ROLE_KEY"
+            "JWT_SECRET=$env:JWT_SECRET"
+          ) | Set-Content -Path .env.local -Encoding UTF8
+
+      - name: Check release token
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.WEB_COLLECTOR_RELEASE_TOKEN }}
+        shell: pwsh
+        run: |
+          if (-not $env:GH_TOKEN) {
+            throw 'Missing WEB_COLLECTOR_RELEASE_TOKEN secret.'
+          }
+
+      - name: Build Windows installer
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && github.event.inputs.publish != 'true' }}
+        working-directory: frontend
+        run: npm run electron:build
+
+      - name: Publish Windows installer
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true' }}
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ secrets.WEB_COLLECTOR_RELEASE_TOKEN }}
+        run: npm run electron:publish
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-collector-windows
+          path: frontend/dist-installer/*
+
+  build-macos:
+    name: Build macOS installer
+    runs-on: macos-latest
+    needs: build-windows
+    permissions:
+      contents: read
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create app environment file
+        working-directory: frontend
+        shell: bash
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          node -e "const required=['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','JWT_SECRET']; const missing=required.filter((name)=>!process.env[name]); if (missing.length) { console.error('Missing required secrets: ' + missing.join(', ')); process.exit(1); }"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}"
+            echo "JWT_SECRET=${JWT_SECRET}"
+          } > .env.local
+
+      - name: Check release token
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.WEB_COLLECTOR_RELEASE_TOKEN }}
+        run: |
+          node -e "if (!process.env.GH_TOKEN) { console.error('Missing WEB_COLLECTOR_RELEASE_TOKEN secret.'); process.exit(1); }"
+
+      - name: Build macOS installer
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && github.event.inputs.publish != 'true' }}
+        working-directory: frontend
+        run: npm run electron:build:mac
+
+      - name: Publish macOS installer
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true' }}
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ secrets.WEB_COLLECTOR_RELEASE_TOKEN }}
+        run: npm run electron:build:mac && node scripts/upload-release-assets.js mac
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-collector-macos
+          path: frontend/dist-installer/*

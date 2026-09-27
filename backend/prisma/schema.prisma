@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String     @id @default(uuid())
+  username      String     @unique
+  email         String     @unique
+  password_hash String
+  theme         String     @default("light")
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @updatedAt
+
+  categories    Category[]
+  links         Link[]
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  user_id     String
+  name        String
+  color       String   @default("#3B82F6")
+  order_index Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  links       Link[]
+
+  @@index([user_id])
+}
+
+model Link {
+  id          String    @id @default(uuid())
+  user_id     String
+  category_id String?
+  title       String
+  url         String
+  favicon_url String?
+  order_index Int       @default(0)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  category    Category? @relation(fields: [category_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([category_id])
+}

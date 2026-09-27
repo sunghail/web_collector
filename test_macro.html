@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Macro Icon - Final Selection</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #e5e5e5;
+    font-family: 'Inter', -apple-system, sans-serif;
+    padding: 40px;
+  }
+  h1 { font-size: 24px; margin-bottom: 8px; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 40px; }
+
+  /* 실제 LinkCard와 동일한 스타일 */
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    max-width: 1200px;
+  }
+  .link-card {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .link-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    transform: translateY(-2px);
+  }
+  .link-card .label {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #3b82f6;
+    color: white;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .link-card .icon-wrap {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 12px;
+    position: relative;
+  }
+  .link-card .title {
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .link-card .url {
+    font-size: 11px;
+    color: #666;
+    text-align: center;
+    margin-top: 4px;
+  }
+  .link-card .macro-sub {
+    font-size: 10px;
+    color: #3b82f6;
+    text-align: center;
+    margin-top: 4px;
+  }
+  h2 {
+    font-size: 15px;
+    color: #3b82f6;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #222;
+  }
+  h2:first-of-type { margin-top: 0; }
+  .compare-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+    align-items: start;
+  }
+  .compare-row .link-card { width: 160px; flex-shrink: 0; }
+  .sep {
+    display: flex;
+    align-items: center;
+    color: #444;
+    font-size: 12px;
+    padding: 0 8px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Macro Card Icon - 파비콘 + 겹친카드 + 숫자배지</h1>
+<p class="subtitle">실제 카드 크기로 10개 디자인. 번호를 알려주세요.</p>
+
+<!-- 일반 링크 비교용 -->
+<h2>일반 링크 (비교용)</h2>
+<div class="compare-row">
+  <div class="link-card">
+    <div class="icon-wrap">
+      <div style="width:64px;height:64px;background:#222;border-radius:10px;display:flex;align-items:center;justify-content:center;">
+        <img src="https://www.google.com/s2/favicons?domain=youtube.com&sz=128" width="48" height="48" style="border-radius:4px;">
+      </div>
+    </div>
+    <div class="title">Youtube</div>
+    <div class="url">youtube.com</div>
+  </div>
+  <div class="link-card">
+    <div class="icon-wrap">
+      <div style="width:64px;height:64px;background:#222;border-radius:10px;display:flex;align-items:center;justify-content:center;">
+        <img src="https://www.google.com/s2/favicons?domain=github.com&sz=128" width="48" height="48" style="border-radius:4px;">
+      </div>
+    </div>
+    <div class="title">Github</div>
+    <div class="url">github.com</div>
+  </div>
+</div>
+
+<h2>매크로 카드 후보</h2>
+<div class="preview-grid">
+
+  <!-- #1: 겹친 카드 + 2x2 파비콘 + 우상단 배지 -->
+  <div class="link-card">
+    <div class="label">#1</div>
+    <div class="icon-wrap">
+      <!-- 뒤 카드들 -->
+      <div style="position:absolute;top:-4px;left:4px;width:56px;height:56px;background:#1e293b;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:-2px;left:2px;width:56px;height:56px;background:#1e3048;border:1px solid #334155;border-radius:10px;"></div>
+      <!-- 앞 카드: 2x2 파비콘 -->
+      <div style="position:absolute;top:0;left:0;width:56px;height:56px;background:#1a1a2e;border:1.5px solid #3b82f6;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:5px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="20" height="20" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="20" height="20" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="20" height="20" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="20" height="20" style="border-radius:3px;">
+      </div>
+      <!-- 배지 -->
+      <div style="position:absolute;top:-8px;right:-4px;width:22px;height:22px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;border:2px solid #1a1a1a;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #2: 겹친 카드 (대각선) + 2x2 파비콘 + 좌하단 배지 -->
+  <div class="link-card">
+    <div class="label">#2</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-4px;left:8px;width:52px;height:52px;background:#1e293b;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:-2px;left:4px;width:52px;height:52px;background:#1e3048;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:0;left:0;width:52px;height:52px;background:#1a1a2e;border:1.5px solid #3b82f6;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:4px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+      </div>
+      <div style="position:absolute;bottom:0;right:0;min-width:22px;height:22px;background:#3b82f6;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;border:2px solid #1a1a1a;padding:0 4px;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #3: 겹친 카드 3장 + 대표 파비콘 1개 + 숫자 배지 -->
+  <div class="link-card">
+    <div class="label">#3</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-6px;left:6px;width:52px;height:52px;background:#1e293b;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:-3px;left:3px;width:52px;height:52px;background:#1e3048;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:0;left:0;width:52px;height:52px;background:#1a1a2e;border:1.5px solid #3b82f6;border-radius:10px;display:flex;align-items:center;justify-content:center;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=128" width="32" height="32" style="border-radius:4px;">
+      </div>
+      <div style="position:absolute;top:-8px;right:-2px;width:24px;height:24px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;border:2px solid #1a1a1a;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #4: 4장 겹친 카드 + 2x2 파비콘 + 우상단 큰 배지 -->
+  <div class="link-card">
+    <div class="label">#4</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-6px;left:6px;width:54px;height:54px;background:#172032;border:1px solid #293548;border-radius:10px;"></div>
+      <div style="position:absolute;top:-4px;left:4px;width:54px;height:54px;background:#1a2740;border:1px solid #2e4058;border-radius:10px;"></div>
+      <div style="position:absolute;top:-2px;left:2px;width:54px;height:54px;background:#1c2e4a;border:1px solid #344d6e;border-radius:10px;"></div>
+      <div style="position:absolute;top:0;left:0;width:54px;height:54px;background:#111827;border:1.5px solid #3b82f6;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:5px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+      </div>
+      <div style="position:absolute;top:-10px;right:-6px;min-width:26px;height:26px;background:#2563eb;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:white;border:2.5px solid #0a0a0a;padding:0 5px;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #5: 겹친 카드 + 2x2 파비콘 (3개+더보기) + 배지 -->
+  <div class="link-card">
+    <div class="label">#5</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-4px;left:4px;width:56px;height:56px;background:#1e293b;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:-2px;left:2px;width:56px;height:56px;background:#1e3048;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:0;left:0;width:56px;height:56px;background:#111827;border:1.5px solid #3b82f6;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:5px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="20" height="20" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="20" height="20" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="20" height="20" style="border-radius:3px;">
+        <div style="width:20px;height:20px;background:#2563eb;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:white;">+2</div>
+      </div>
+      <div style="position:absolute;top:-8px;right:-4px;width:22px;height:22px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;border:2px solid #0a0a0a;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #6: 그림자로 깊이감 + 2x2 파비콘 + 배지 (그림자 스타일) -->
+  <div class="link-card">
+    <div class="label">#6</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:4px;left:4px;width:52px;height:52px;background:#0f172a;border-radius:10px;box-shadow:0 0 0 1px #1e3a5f;"></div>
+      <div style="position:absolute;top:2px;left:2px;width:52px;height:52px;background:#131d33;border-radius:10px;box-shadow:0 0 0 1px #1e3a5f;"></div>
+      <div style="position:absolute;top:0;left:0;width:52px;height:52px;background:#111827;border-radius:10px;box-shadow:0 0 0 1.5px #3b82f6;display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:4px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+      </div>
+      <div style="position:absolute;top:-6px;right:2px;min-width:20px;height:20px;background:#3b82f6;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;padding:0 4px;box-shadow:0 2px 6px rgba(59,130,246,0.4);">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #7: 위로 겹침 (아래->위) + 2x2 파비콘 + 배지 -->
+  <div class="link-card">
+    <div class="label">#7</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;bottom:-6px;left:6px;width:54px;height:54px;background:#1e293b;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;bottom:-3px;left:3px;width:54px;height:54px;background:#1e3048;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;bottom:0;left:0;width:54px;height:54px;background:#111827;border:1.5px solid #3b82f6;border-radius:10px;display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:5px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+        <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="19" height="19" style="border-radius:3px;">
+      </div>
+      <div style="position:absolute;top:0;right:-4px;width:22px;height:22px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;border:2px solid #0a0a0a;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #8: 넓게 겹친 카드 + 1줄 3파비콘 + 배지 -->
+  <div class="link-card">
+    <div class="label">#8</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-4px;left:4px;width:58px;height:44px;background:#1e293b;border:1px solid #334155;border-radius:8px;"></div>
+      <div style="position:absolute;top:-2px;left:2px;width:58px;height:44px;background:#1e3048;border:1px solid #334155;border-radius:8px;"></div>
+      <div style="position:absolute;top:0;left:0;width:58px;height:44px;background:#111827;border:1.5px solid #3b82f6;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:3px;padding:6px;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="22" height="22" style="border-radius:4px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="22" height="22" style="border-radius:4px;">
+        <div style="width:22px;height:22px;background:#1e3a5f;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#60a5fa;">...</div>
+      </div>
+      <div style="position:absolute;top:-8px;right:-4px;width:22px;height:22px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;border:2px solid #0a0a0a;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #9: 둥근 겹침 + 2x2 파비콘 + 배지 (부드러운 그라디언트) -->
+  <div class="link-card">
+    <div class="label">#9</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-5px;left:5px;width:54px;height:54px;background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid #334155;border-radius:14px;"></div>
+      <div style="position:absolute;top:-2.5px;left:2.5px;width:54px;height:54px;background:linear-gradient(135deg,#131d33,#1e3048);border:1px solid #334155;border-radius:14px;"></div>
+      <div style="position:absolute;top:0;left:0;width:54px;height:54px;background:linear-gradient(135deg,#111827,#1e293b);border:1.5px solid #3b82f6;border-radius:14px;display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:5px;overflow:hidden;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64" width="19" height="19" style="border-radius:5px;">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="19" height="19" style="border-radius:5px;">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="19" height="19" style="border-radius:5px;">
+        <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="19" height="19" style="border-radius:5px;">
+      </div>
+      <div style="position:absolute;top:-8px;right:-4px;min-width:24px;height:24px;background:linear-gradient(135deg,#2563eb,#3b82f6);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;border:2px solid #0a0a0a;padding:0 4px;box-shadow:0 2px 8px rgba(37,99,235,0.5);">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+  <!-- #10: 깔끔한 겹침 + 큰 파비콘 1개 + 작은 파비콘 row + 배지 -->
+  <div class="link-card">
+    <div class="label">#10</div>
+    <div class="icon-wrap">
+      <div style="position:absolute;top:-4px;left:4px;width:56px;height:56px;background:#1e293b;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:-2px;left:2px;width:56px;height:56px;background:#1e3048;border:1px solid #334155;border-radius:10px;"></div>
+      <div style="position:absolute;top:0;left:0;width:56px;height:56px;background:#111827;border:1.5px solid #3b82f6;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px;">
+        <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=128" width="28" height="28" style="border-radius:4px;">
+        <div style="display:flex;gap:2px;">
+          <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64" width="12" height="12" style="border-radius:2px;opacity:0.7;">
+          <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=64" width="12" height="12" style="border-radius:2px;opacity:0.7;">
+          <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=64" width="12" height="12" style="border-radius:2px;opacity:0.7;">
+          <div style="width:12px;height:12px;background:#1e3a5f;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:6px;font-weight:700;color:#60a5fa;">+1</div>
+        </div>
+      </div>
+      <div style="position:absolute;top:-8px;right:-4px;width:22px;height:22px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;border:2px solid #0a0a0a;">5</div>
+    </div>
+    <div class="title">AI Tools</div>
+    <div class="macro-sub">5 sites</div>
+  </div>
+
+</div>
+
+</body>
+</html>
