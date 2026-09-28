@@ -25,6 +25,18 @@ interface ChatsViewProps {
 }
 
 const LIST_POLL_MS = 8000;
+
+type ChatTab = 'all' | 'direct' | 'groups';
+const TAB_STORAGE_KEY = 'chats-tab';
+const tabs: { id: ChatTab; name: string }[] = [
+  { id: 'all', name: 'All' },
+  { id: 'direct', name: 'Direct' },
+  { id: 'groups', name: 'Groups' },
+];
+
+function inTab(room: RoomSummary, tab: ChatTab) {
+  return tab === 'all' || (tab === 'direct' ? room.isDirect : !room.isDirect);
+}
 const shortTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const shortDate = new Intl.DateTimeFormat(undefined, { month: 'numeric', day: 'numeric' });
 
@@ -43,25 +55,40 @@ function preview(room: RoomSummary) {
 
 function RoomList({
   rooms,
+  tab,
   selectedId,
   onSelect,
   onNew,
+  onOpenFriends,
 }: {
   rooms: RoomSummary[];
+  tab: ChatTab;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onOpenFriends: () => void;
 }) {
   return (
     <div className="custom-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
       {rooms.length === 0 && (
         <div className="px-4 py-10 text-center">
-          <p className="text-sm font-medium">No chats yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">Start one with your friends.</p>
-          <Button size="sm" className="mt-4 gap-1.5" onClick={onNew}>
-            <Plus className="size-4" />
-            New room
-          </Button>
+          <p className="text-sm font-medium">
+            {tab === 'direct' ? 'No direct chats yet' : tab === 'groups' ? 'No rooms yet' : 'No chats yet'}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {tab === 'direct' ? 'Message a friend from the Friends screen.' : 'Start one with your friends.'}
+          </p>
+          {tab === 'direct' ? (
+            <Button size="sm" variant="outline" className="mt-4 gap-1.5" onClick={onOpenFriends}>
+              <Users className="size-4" />
+              Go to Friends
+            </Button>
+          ) : (
+            <Button size="sm" className="mt-4 gap-1.5" onClick={onNew}>
+              <Plus className="size-4" />
+              New room
+            </Button>
+          )}
         </div>
       )}
       {rooms.map((room) => {
@@ -124,6 +151,27 @@ export function ChatsView({
   const [needsSetup, setNeedsSetup] = useState(false);
   const [room, setRoom] = useState<RoomDetail | null>(null);
   const [dialog, setDialog] = useState<'new' | 'add' | 'members' | 'rename' | null>(null);
+  const [tab, setTab] = useState<ChatTab>('all');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TAB_STORAGE_KEY);
+      if (saved === 'direct' || saved === 'groups') setTab(saved);
+    } catch {
+      // Storage unavailable: start on All.
+    }
+  }, []);
+
+  const chooseTab = (next: ChatTab) => {
+    setTab(next);
+    try {
+      localStorage.setItem(TAB_STORAGE_KEY, next);
+    } catch {
+      // Not remembered this time; the tab still switches.
+    }
+  };
+
+  const unreadIn = (target: ChatTab) => rooms.filter((room) => inTab(room, target)).reduce((sum, room) => sum + room.unread, 0);
   const onChangedRef = useRef(onChanged);
   onChangedRef.current = onChanged;
 
@@ -267,7 +315,41 @@ export function ChatsView({
             <SetupNotice />
           </div>
         ) : (
-          <RoomList rooms={rooms} selectedId={roomId} onSelect={onSelectRoom} onNew={() => setDialog('new')} />
+          <>
+            <div className="flex gap-1 border-b border-border/80 px-3 py-2" role="tablist" aria-label="Kind of chat">
+              {tabs.map((option) => {
+                const isSelected = tab === option.id;
+                const unread = unreadIn(option.id);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => chooseTab(option.id)}
+                    className={`flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[13px] transition-colors ${
+                      isSelected ? 'bg-card font-medium text-foreground shadow-card ring-1 ring-border/70' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                    }`}
+                  >
+                    {option.name}
+                    {unread > 0 && (
+                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold tabular-nums text-primary-foreground">
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <RoomList
+              rooms={rooms.filter((room) => inTab(room, tab))}
+              tab={tab}
+              selectedId={roomId}
+              onSelect={onSelectRoom}
+              onNew={() => setDialog('new')}
+              onOpenFriends={onOpenFriends}
+            />
+          </>
         )}
       </aside>
 
