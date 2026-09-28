@@ -5,6 +5,7 @@ import { useTheme } from 'next-themes';
 import { Check, Monitor, Moon, Plus, RotateCcw, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ColorField, Group, Segmented, WithPreview } from './SettingsParts';
+import { useT, type MessageKey } from '@/lib/i18n';
 import {
   ACCENTS,
   CORNER_RANGE,
@@ -28,15 +29,15 @@ import {
 } from '@/lib/appearance';
 
 const modes = [
-  { id: 'light' as const, name: 'Light', icon: <Sun className="size-3.5" /> },
-  { id: 'dark' as const, name: 'Dark', icon: <Moon className="size-3.5" /> },
-  { id: 'system' as const, name: 'System', icon: <Monitor className="size-3.5" /> },
+  { id: 'light' as const, name: 'style.light' as MessageKey, icon: <Sun className="size-3.5" /> },
+  { id: 'dark' as const, name: 'style.dark' as MessageKey, icon: <Moon className="size-3.5" /> },
+  { id: 'system' as const, name: 'style.system' as MessageKey, icon: <Monitor className="size-3.5" /> },
 ];
 
-const shadowOptions: { id: ShadowLevel; name: string }[] = [
-  { id: 'none', name: 'None' },
-  { id: 'soft', name: 'Soft' },
-  { id: 'strong', name: 'Strong' },
+const shadowOptions: { id: ShadowLevel; name: MessageKey }[] = [
+  { id: 'none', name: 'shadow.none' },
+  { id: 'soft', name: 'shadow.soft' },
+  { id: 'strong', name: 'shadow.strong' },
 ];
 
 function Thumbnail({ palette, radius, isSelected }: { palette: StylePalette; radius: number; isSelected: boolean }) {
@@ -93,6 +94,8 @@ function StylePreview() {
 }
 
 export function WebStyleSettings() {
+  const t = useT();
+  const presetName = (id: string) => t(`preset.${id}` as MessageKey);
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [style, setStyle] = useState<StyleId>('default');
   const [custom, setCustom] = useState<CustomStyle>(() => customStyleFromPreset('default'));
@@ -155,12 +158,17 @@ export function WebStyleSettings() {
   return (
     <WithPreview preview={<StylePreview />}>
 
-      <Group label="Mode">
-        <Segmented label="Color mode" value={(theme ?? 'system') as 'light' | 'dark' | 'system'} options={modes} onChange={setTheme} />
+      <Group label={t('style.mode')}>
+        <Segmented
+          label={t('style.modeLabel')}
+          value={(theme ?? 'system') as 'light' | 'dark' | 'system'}
+          options={modes.map((option) => ({ ...option, name: t(option.name) }))}
+          onChange={setTheme}
+        />
       </Group>
 
-      <Group label="Preset">
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" role="radiogroup" aria-label="Style preset">
+      <Group label={t('style.preset')}>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" role="radiogroup" aria-label={t('style.presetLabel')}>
           {PRESET_STYLES.map((preset) => (
             <button
               key={preset.id}
@@ -173,7 +181,7 @@ export function WebStyleSettings() {
             >
               <Thumbnail palette={preset[mode]} radius={preset.cornerRadius} isSelected={style === preset.id} />
               <span className={`block text-xs ${style === preset.id ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-                {preset.name}
+                {presetName(preset.id)}
               </span>
             </button>
           ))}
@@ -182,34 +190,34 @@ export function WebStyleSettings() {
             role="radio"
             aria-checked={style === 'custom'}
             onClick={selectCustom}
-            title="Your own colors and corners"
+            title={t('preset.customTitle')}
             className="group/style space-y-1.5 text-left"
           >
             <Thumbnail palette={custom[mode]} radius={custom.cornerRadius} isSelected={style === 'custom'} />
             <span className={`block text-xs ${style === 'custom' ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
-              Custom
+              {t('preset.custom')}
             </span>
           </button>
         </div>
       </Group>
 
       <Group
-        label="Customize"
-        hint={style === 'custom' ? `Based on ${getPreset(shown.base).name}` : 'Any change switches to Custom'}
+        label={t('style.customize')}
+        hint={style === 'custom' ? t('style.basedOn', { name: presetName(shown.base) }) : t('style.customizeHint')}
         value={
           style === 'custom' && (
             <Button type="button" variant="ghost" size="sm" onClick={resetToBase} className="-my-1 h-7 gap-1.5 px-2 text-xs">
               <RotateCcw className="size-3.5" />
-              Reset to {getPreset(shown.base).name}
+              {t('style.resetTo', { name: presetName(shown.base) })}
             </Button>
           )
         }
       >
         <div className="space-y-2">
           <div className="flex items-center justify-between text-[13px]">
-            <label htmlFor="corner-radius">Corners</label>
+            <label htmlFor="corner-radius">{t('style.corners')}</label>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {shown.cornerRadius === 0 ? 'Square' : `${shown.cornerRadius}px`}
+              {shown.cornerRadius === 0 ? t('style.square') : `${shown.cornerRadius}px`}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -229,26 +237,23 @@ export function WebStyleSettings() {
         </div>
 
         <div className="flex items-center justify-between gap-4">
-          <span className="text-[13px]">Shadows</span>
+          <span className="text-[13px]">{t('style.shadows')}</span>
           <div className="w-56">
             <Segmented
-              label="Shadows"
+              label={t('style.shadows')}
               value={shown.shadow}
-              options={shadowOptions}
+              options={shadowOptions.map((option) => ({ ...option, name: t(option.name) }))}
               onChange={(shadow) => updateCustom((current) => ({ ...current, shadow }))}
             />
           </div>
         </div>
 
         <div className="space-y-2.5 border-t border-border pt-3">
-          <div className="text-xs text-muted-foreground">
-            Colors for <span className="font-medium text-foreground">{mode === 'dark' ? 'dark' : 'light'} mode</span>
-            {' '}· switch the mode above to edit the other one
-          </div>
+          <div className="text-xs text-muted-foreground">{t(mode === 'dark' ? 'style.colorsDark' : 'style.colorsLight')}</div>
           {PALETTE_FIELDS.map((field) => (
             <ColorField
               key={field.key}
-              label={field.label}
+              label={t(`palette.${field.key}` as MessageKey)}
               value={shown[mode][field.key]}
               onChange={(value) =>
                 updateCustom((current) => ({ ...current, [mode]: { ...current[mode], [field.key]: value } }))
@@ -258,8 +263,8 @@ export function WebStyleSettings() {
         </div>
       </Group>
 
-      <Group label="Accent">
-        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Accent color">
+      <Group label={t('style.accent')}>
+        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t('style.accentLabel')}>
           {ACCENTS.map((option) => {
             const isSelected = accent === option.id;
             return (
@@ -268,8 +273,8 @@ export function WebStyleSettings() {
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
-                aria-label={option.name}
-                title={option.name}
+                aria-label={t(`accent.${option.id}` as MessageKey)}
+                title={t(`accent.${option.id}` as MessageKey)}
                 onClick={() => handleAccentChange(option.id)}
                 className={`
                   flex size-7 items-center justify-center rounded-full transition-transform
@@ -283,7 +288,7 @@ export function WebStyleSettings() {
           })}
           {/* Custom: the swatch is a color picker; picking a color selects it. */}
           <label
-            title="Pick your own color"
+            title={t('accent.custom')}
             className={`
               relative flex size-7 cursor-pointer items-center justify-center rounded-full transition-transform
               ${accent === 'custom' ? 'ring-2 ring-foreground/60 ring-offset-2 ring-offset-popover' : 'hover:scale-110'}
@@ -303,7 +308,7 @@ export function WebStyleSettings() {
               type="color"
               value={customAccent}
               onChange={(e) => handleCustomAccent(e.target.value)}
-              aria-label="Custom accent color"
+              aria-label={t('accent.custom')}
               className="absolute inset-0 cursor-pointer rounded-full opacity-0"
             />
           </label>

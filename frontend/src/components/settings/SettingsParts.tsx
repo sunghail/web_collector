@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { HEX_COLOR } from '@/lib/appearance';
+import { useT } from '@/lib/i18n';
 
 /** A bordered box with a small uppercase label, used to group related settings. */
 export function Group({
@@ -36,10 +37,11 @@ export function Group({
  * (the negative margins stretch its background over the panel's padding).
  */
 export function WithPreview({ preview, children }: { preview: ReactNode; children: ReactNode }) {
+  const t = useT();
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6">
       <aside className="sticky -top-5 z-10 -mx-6 -mt-5 space-y-2 border-b border-border bg-popover px-6 pb-3 pt-5 lg:top-0 lg:col-start-2 lg:row-start-1 lg:m-0 lg:self-start lg:border-0 lg:p-0">
-        <span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Preview</span>
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{t('preview')}</span>
         {preview}
       </aside>
       <div className="space-y-4 lg:col-start-1 lg:row-start-1">{children}</div>
@@ -127,13 +129,13 @@ export function ColorField({ label, value, onChange }: { label: string; value: s
       <label
         className="relative size-8 shrink-0 cursor-pointer overflow-hidden rounded-lg border border-input shadow-card"
         style={{ backgroundColor: value }}
-        title={`Pick ${label.toLowerCase()} color`}
+        title={label}
       >
         <input
           type="color"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          aria-label={`${label} color`}
+          aria-label={label}
           className="absolute inset-0 cursor-pointer opacity-0"
         />
       </label>
@@ -146,7 +148,7 @@ export function ColorField({ label, value, onChange }: { label: string; value: s
           if (HEX_COLOR.test(next)) onChange(next.toLowerCase());
         }}
         onBlur={() => setDraft(value)}
-        aria-label={`${label} hex code`}
+        aria-label={`${label} (hex)`}
         spellCheck={false}
         className={`
           h-8 w-24 rounded-lg border bg-card px-2.5 font-mono text-xs shadow-card outline-none transition-[border-color,box-shadow]

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { Download, Laptop, Monitor, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Group } from './SettingsParts';
+import { NotificationSettings } from './NotificationSettings';
+import { useT, type Translate } from '@/lib/i18n';
 
 const idleUpdateStatus: UpdateStatusPayload = {
   status: 'idle',
@@ -11,7 +13,34 @@ const idleUpdateStatus: UpdateStatusPayload = {
   currentVersion: '',
 };
 
-function getUpdateRows(updateStatus: UpdateStatusPayload) {
+/** The update status in the chosen language (the desktop app reports it in English). */
+function describeUpdate(update: UpdateStatusPayload, t: Translate) {
+  const version = update.version ?? '';
+  const text = (() => {
+    switch (update.status) {
+      case 'idle':
+        return t('update.msg.idle');
+      case 'checking':
+        return t('update.msg.checking');
+      case 'not-available':
+        return t('update.msg.latest');
+      case 'available':
+        return update.message.startsWith('Opened') ? t('update.msg.openedPage') : t('update.msg.available', { version });
+      case 'downloading':
+        return t('update.msg.downloading', { percent: update.percent ?? 0 });
+      case 'downloaded':
+        return update.message.startsWith('Restarting') ? t('update.msg.restarting') : t('update.msg.downloaded', { version });
+      case 'unsupported':
+        return t('update.msg.unsupported');
+      default:
+        return t('update.msg.error', { detail: update.message.replace(/^Update (check|download) failed: /, '') });
+    }
+  })();
+  // No version number known: drop the empty "()".
+  return text.replace(/s*()/, '');
+}
+
+function getUpdateRows(updateStatus: UpdateStatusPayload, t: Translate) {
   const isDownloaded = updateStatus.status === 'downloaded';
   const isDownloading = updateStatus.status === 'downloading';
   const hasUpdate = updateStatus.status === 'available' || isDownloading || isDownloaded;
@@ -19,13 +48,13 @@ function getUpdateRows(updateStatus: UpdateStatusPayload) {
 
   return [
     {
-      label: 'Download check',
-      value: hasUpdate ? '100%' : updateStatus.status === 'checking' ? 'Checking' : 'Ready',
+      label: t('update.downloadCheck'),
+      value: hasUpdate ? '100%' : updateStatus.status === 'checking' ? t('update.checking') : t('update.ready'),
       percent: hasUpdate ? 100 : updateStatus.status === 'checking' ? 45 : 0,
     },
     {
-      label: 'Apply installer',
-      value: isDownloaded ? 'Ready' : isDownloading ? `${downloadPercent}%` : 'Waiting',
+      label: t('update.applyInstaller'),
+      value: isDownloaded ? t('update.ready') : isDownloading ? `${downloadPercent}%` : t('update.waiting'),
       percent: downloadPercent,
     },
   ];
@@ -35,6 +64,7 @@ export function AppSettings() {
   const [appVersion, setAppVersion] = useState('');
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload>(idleUpdateStatus);
   const [isDesktopApp, setIsDesktopApp] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     const electronAPI = window.electronAPI;
@@ -86,14 +116,14 @@ export function AppSettings() {
   const isBusy = updateStatus.status === 'checking' || updateStatus.status === 'downloading';
   const buttonLabel =
     updateStatus.status === 'available'
-      ? 'Download'
+      ? t('update.download')
       : updateStatus.status === 'downloaded'
-        ? 'Restart to install'
+        ? t('update.restart')
         : updateStatus.status === 'checking'
-          ? 'Checking'
+          ? t('update.checking')
           : updateStatus.status === 'downloading'
             ? `${updateStatus.percent ?? 0}%`
-            : 'Check for updates';
+            : t('update.check');
   const buttonIcon =
     updateStatus.status === 'available' || updateStatus.status === 'downloading' ? (
       <Download className={updateStatus.status === 'downloading' ? 'animate-pulse' : ''} />
@@ -106,11 +136,11 @@ export function AppSettings() {
 
   return (
     <div className="space-y-4">
+      <NotificationSettings />
+
       {!isDesktopApp && (
-        <Group label="Desktop app">
-          <p className="text-[13px] text-muted-foreground">
-            Tray icon, floating category widgets and automatic updates. Same account as this website.
-          </p>
+        <Group label={t('app.desktop')}>
+          <p className="text-[13px] text-muted-foreground">{t('app.desktopHint')}</p>
           <div className="grid grid-cols-2 gap-2">
             <Button asChild variant="outline" className="gap-2">
               <a href="/api/download/windows">
@@ -129,11 +159,11 @@ export function AppSettings() {
       )}
 
       {isDesktopApp && (
-      <Group label="Updates">
+      <Group label={t('app.updates')}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[13px]">{appVersion ? `Version ${appVersion}` : 'Web Collector'}</div>
-            <div className="text-xs text-muted-foreground">{updateStatus.message}</div>
+            <div className="text-[13px]">{appVersion ? t('app.version', { version: appVersion }) : 'Web Collector'}</div>
+            <div className="text-xs text-muted-foreground">{describeUpdate(updateStatus, t)}</div>
           </div>
           <Button
             type="button"
@@ -148,7 +178,7 @@ export function AppSettings() {
         </div>
         {showProgress && (
           <div className="grid gap-2">
-            {getUpdateRows(updateStatus).map((row) => (
+            {getUpdateRows(updateStatus, t).map((row) => (
               <div key={row.label} className="rounded-lg border border-border p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                   <span className="font-medium">{row.label}</span>
@@ -164,17 +194,17 @@ export function AppSettings() {
       </Group>
       )}
 
-      <Group label="Keyboard">
+      <Group label={t('app.keyboard')}>
         <div className="flex items-center justify-between text-[13px]">
-          <span>Quick open: find a link or a place</span>
+          <span>{t('key.quickOpen')}</span>
           <kbd className="rounded-md border border-border bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">Ctrl K</kbd>
         </div>
         <div className="flex items-center justify-between text-[13px]">
-          <span>Search links</span>
+          <span>{t('key.search')}</span>
           <kbd className="rounded-md border border-border bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">/</kbd>
         </div>
         <div className="flex items-center justify-between text-[13px]">
-          <span>Clear search</span>
+          <span>{t('key.clearSearch')}</span>
           <kbd className="rounded-md border border-border bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">Esc</kbd>
         </div>
       </Group>

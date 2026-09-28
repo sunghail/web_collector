@@ -5,6 +5,7 @@ import { RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CardStylePreview } from '@/components/layout/CardStylePreview';
 import { ChoiceButton, Group, WithPreview } from './SettingsParts';
+import { useT, type MessageKey } from '@/lib/i18n';
 import {
   CARD_HEIGHT_RANGE,
   CARD_PREFERENCE_DEFAULTS,
@@ -13,21 +14,22 @@ import {
   type CardLayout,
 } from '@/lib/cardPreferences';
 
-const cardLayouts: { id: CardLayout; name: string; description: string }[] = [
-  { id: 'compact', name: 'Compact', description: 'One row per link' },
-  { id: 'tile', name: 'Tile', description: 'Icon above the title' },
+const cardLayouts: { id: CardLayout; name: MessageKey; description: MessageKey }[] = [
+  { id: 'compact', name: 'cards.compact', description: 'cards.compactHint' },
+  { id: 'tile', name: 'cards.tile', description: 'cards.tileHint' },
 ];
 
-const hoverEffects: { id: CardHoverEffect; name: string; description: string }[] = [
-  { id: 'lift', name: 'Lift', description: 'Raises slightly' },
-  { id: 'bar', name: 'Accent bar', description: 'Bar sweeps in, title colors' },
-  { id: 'title', name: 'Accent title', description: 'Title only' },
-  { id: 'none', name: 'None', description: 'Shadow only' },
+const hoverEffects: { id: CardHoverEffect; name: MessageKey; description: MessageKey }[] = [
+  { id: 'lift', name: 'effect.lift', description: 'effect.liftHint' },
+  { id: 'bar', name: 'effect.bar', description: 'effect.barHint' },
+  { id: 'title', name: 'effect.title', description: 'effect.titleHint' },
+  { id: 'none', name: 'effect.none', description: 'effect.noneHint' },
 ];
 
 export function LinkCardSettings() {
   const { layout, hoverEffect, compactHeight, tileHeight, setPreferences, reset } = useCardPreferences();
   const [previewedEffect, setPreviewedEffect] = useState<CardHoverEffect | null>(null);
+  const t = useT();
 
   const heightRange = CARD_HEIGHT_RANGE[layout];
   const cardHeight = layout === 'tile' ? tileHeight : compactHeight;
@@ -50,24 +52,24 @@ export function LinkCardSettings() {
         />
       }
     >
-      <Group label="Shape">
+      <Group label={t('cards.shape')}>
         <div className="grid grid-cols-2 gap-2">
           {cardLayouts.map((option) => (
             <ChoiceButton
               key={option.id}
               isSelected={layout === option.id}
               onClick={() => setPreferences({ layout: option.id })}
-              title={option.name}
-              description={option.description}
+              title={t(option.name)}
+              description={t(option.description)}
             />
           ))}
         </div>
       </Group>
 
-      <Group label="Size" value={<span className="text-xs tabular-nums text-muted-foreground">{cardHeight}px</span>}>
+      <Group label={t('cards.size')} value={<span className="text-xs tabular-nums text-muted-foreground">{cardHeight}px</span>}>
         <input
           type="range"
-          aria-label="Card height"
+          aria-label={t('cards.height')}
           min={heightRange.min}
           max={heightRange.max}
           step={4}
@@ -80,7 +82,7 @@ export function LinkCardSettings() {
         />
       </Group>
 
-      <Group label="Animation" hint="Point at one to preview it">
+      <Group label={t('cards.animation')} hint={t('cards.animationHint')}>
         <div className="grid grid-cols-2 gap-2">
           {hoverEffects.map((option) => (
             <ChoiceButton
@@ -91,8 +93,8 @@ export function LinkCardSettings() {
               onMouseLeave={() => setPreviewedEffect(null)}
               onFocus={() => setPreviewedEffect(option.id)}
               onBlur={() => setPreviewedEffect(null)}
-              title={option.name}
-              description={option.description}
+              title={t(option.name)}
+              description={t(option.description)}
             />
           ))}
         </div>
@@ -102,7 +104,7 @@ export function LinkCardSettings() {
         <div className="flex justify-end">
           <Button type="button" variant="ghost" size="sm" onClick={reset} className="gap-1.5 text-xs">
             <RotateCcw className="size-3.5" />
-            Reset link cards
+            {t('cards.reset')}
           </Button>
         </div>
       )}

@@ -31,6 +31,8 @@ interface ElectronAPI {
   checkForUpdates?: () => Promise<UpdateStatusPayload>;
   downloadUpdate?: () => Promise<UpdateStatusPayload>;
   installUpdate?: () => Promise<UpdateStatusPayload>;
+  /** Shows and focuses the main window, e.g. when a message notification is clicked (app 2.0.2+). */
+  showMainWindow?: () => void;
   openUrls?: (urls: string[]) => Promise<void>;
   openPath?: (path: string) => void;
   openWidget?: (category: WidgetCategoryData) => Promise<void>;

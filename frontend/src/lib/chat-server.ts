@@ -679,3 +679,55 @@ export async function listRoomsFor(userId: string): Promise<RoomSummary[]> {
 
   return summaries.sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
 }
+
+// ---------- Notifications ----------
+
+export interface MentionNotice {
+  messageId: string;
+  authorHandle: string;
+  authorName: string | null;
+  authorEmoji: string | null;
+  snippet: string;
+  createdAt: string;
+}
+
+/**
+ * What a notification needs about unseen mentions: the newest one in the community room
+ * (its text and author), and which chat rooms have any.
+ */
+export async function mentionDetails(userId: string): Promise<{ community: MentionNotice | null; roomIds: string[] }> {
+  const empty = { community: null, roomIds: [] as string[] };
+  const { data, error } = await supabaseAdmin
+    .from('mentions')
+    .select('community_message_id, room_id, created_at')
+    .eq('user_id', userId)
+    .is('seen_at', null)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (isMissingTable(error)) return empty;
+  if (error) throw error;
+  const rows = data ?? [];
+  const roomIds = [...new Set(rows.map((row) => row.room_id).filter(Boolean))] as string[];
+  const newest = rows.find((row) => row.community_message_id);
+  if (!newest) return { community: null, roomIds };
+
+  const { data: message, error: messageError } = await supabaseAdmin
+    .from('community_messages')
+    .select('id, user_id, body, created_at')
+    .eq('id', newest.community_message_id as string)
+    .maybeSingle();
+  if (messageError) throw messageError;
+  if (!message) return { community: null, roomIds };
+  const author = (await profilesFor([message.user_id])).get(message.user_id);
+  return {
+    community: {
+      messageId: message.id,
+      authorHandle: author?.handle || fallbackHandle(message.user_id),
+      authorName: author?.name ?? null,
+      authorEmoji: author?.emoji ?? null,
+      snippet: message.body.trim().slice(0, 140),
+      createdAt: message.created_at,
+    },
+    roomIds,
+  };
+}

@@ -741,12 +741,11 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    showMainWindow();
   });
+
+  // Windows shows notifications only for an app ID that matches the installed shortcut (electron-builder appId).
+  if (process.platform === 'win32') app.setAppUserModelId('com.webcollector.app');
 
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
@@ -757,6 +756,14 @@ if (!gotTheLock) {
     }
     scheduleAutomaticUpdateChecks();
   });
+}
+
+/** Brings the main window back from the tray or behind other windows. */
+function showMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
 }
 
 async function createWindow() {
@@ -775,6 +782,8 @@ async function createWindow() {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
+      // Keep checking for new messages at the normal pace while hidden in the tray, for notifications.
+      backgroundThrottling: false,
     },
     show: false,
   });
@@ -840,6 +849,12 @@ async function createWindow() {
     }
 
     await shell.openPath(resolved);
+  });
+
+  // A message notification was clicked: show the app.
+  ipcMain.on('app:show-main-window', (event) => {
+    if (!isTrustedSender(event)) return;
+    showMainWindow();
   });
 
   ipcMain.on('widget:toggle', (event) => {

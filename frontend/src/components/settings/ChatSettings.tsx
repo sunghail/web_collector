@@ -14,15 +14,17 @@ import {
   useChatPreferences,
 } from '@/lib/chatPreferences';
 import { ChoiceButton, Group, WithPreview } from './SettingsParts';
+import { useT, type MessageKey } from '@/lib/i18n';
 
-const sampleMessages = [
-  { author: 'minji', initial: 'M', time: '9:12 AM', body: 'Morning! Found a great site for reading papers.' },
-  { author: 'you', initial: 'Y', time: '9:14 AM', body: 'Nice, send it over 👀', isMine: true },
+const sampleMessages: { author: string | MessageKey; initial: string; time: string; body: MessageKey; isMine?: boolean }[] = [
+  { author: 'minji', initial: 'M', time: '9:12', body: 'chatPreview.first' },
+  { author: 'chatPreview.you', initial: 'Y', time: '9:14', body: 'chatPreview.second', isMine: true },
 ];
 
 /** A few chat messages drawn with the chosen size, font and color. */
 function ChatPreview() {
   const { fontSize, font, textColor } = useChatPreferences();
+  const t = useT();
   return (
     <div
       className="space-y-3 overflow-hidden rounded-xl border border-border bg-background p-3.5"
@@ -36,15 +38,15 @@ function ChatPreview() {
               message.isMine ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
             }`}
           >
-            {message.initial}
+            {message.isMine ? t(message.author as MessageKey).charAt(0).toUpperCase() : message.initial}
           </span>
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
-              <span className="text-[0.93em] font-semibold text-foreground">{message.author}</span>
+              <span className="text-[0.93em] font-semibold text-foreground">{message.isMine ? t(message.author as MessageKey) : message.author}</span>
               <span className="text-[0.79em] text-muted-foreground">{message.time}</span>
             </div>
             <p className="break-words leading-relaxed text-foreground" style={textColor ? { color: textColor } : undefined}>
-              {message.body}
+              {t(message.body)}
             </p>
           </div>
         </div>
@@ -55,6 +57,7 @@ function ChatPreview() {
 
 export function ChatSettings() {
   const { fontSize, font, textColor, hydrate, setPreferences, reset } = useChatPreferences();
+  const t = useT();
 
   useEffect(() => {
     hydrate();
@@ -73,15 +76,15 @@ export function ChatSettings() {
   return (
     <WithPreview preview={<ChatPreview />}>
       <Group
-        label="Text size"
-        hint="Or Ctrl + mouse wheel in a chat"
+        label={t('chat.textSize')}
+        hint={t('chat.textSizeHint')}
         value={<span className="text-xs tabular-nums text-muted-foreground">{fontSize}px</span>}
       >
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">A</span>
           <input
             type="range"
-            aria-label="Chat text size"
+            aria-label={t('chat.textSize')}
             min={CHAT_FONT_SIZE.min}
             max={CHAT_FONT_SIZE.max}
             step={1}
@@ -93,32 +96,32 @@ export function ChatSettings() {
         </div>
       </Group>
 
-      <Group label="Font">
+      <Group label={t('chat.font')}>
         <div className="grid grid-cols-2 gap-2">
           {CHAT_FONTS.map((option) => (
             <ChoiceButton
               key={option.id}
               isSelected={font === option.id}
               onClick={() => setPreferences({ font: option.id })}
-              title={option.name}
-              description={option.description}
+              title={t(`font.${option.id}` as MessageKey)}
+              description={t(`font.${option.id}Hint` as MessageKey)}
               style={{ fontFamily: option.family }}
             />
           ))}
         </div>
       </Group>
 
-      <Group label="Text color" hint="Message text only">
-        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Chat text color">
+      <Group label={t('chat.textColor')} hint={t('chat.textColorHint')}>
+        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t('chat.textColor')}>
           <button
             type="button"
             role="radio"
             aria-checked={textColor === null}
             onClick={() => setPreferences({ textColor: null })}
-            title="Follow the theme"
+            title={t('chat.colorDefaultTitle')}
             className={`flex h-7 items-center rounded-full border border-border bg-card px-3 text-xs font-medium transition-transform ${swatchRing(textColor === null)}`}
           >
-            Default
+            {t('chat.colorDefault')}
           </button>
           {CHAT_TEXT_COLORS.map((color) => {
             const isSelected = textColor === color;
@@ -140,7 +143,7 @@ export function ChatSettings() {
           })}
           {/* Custom: the swatch is a color picker; picking a color selects it. */}
           <label
-            title="Pick your own color"
+            title={t('accent.custom')}
             className={`relative flex size-7 cursor-pointer items-center justify-center rounded-full transition-transform ${swatchRing(isCustomColor)}`}
             style={{
               background: isCustomColor ? textColor! : 'conic-gradient(#ff5f6d, #ffc371, #47e891, #3aa8ff, #9b6bff, #ff5f6d)',
@@ -155,19 +158,19 @@ export function ChatSettings() {
               type="color"
               value={textColor ?? '#2563eb'}
               onChange={(e) => setPreferences({ textColor: e.target.value })}
-              aria-label="Custom chat text color"
+              aria-label={t('accent.custom')}
               className="absolute inset-0 cursor-pointer rounded-full opacity-0"
             />
           </label>
         </div>
-        {textColor && <p className="text-xs text-muted-foreground">Check that it is readable in both light and dark mode.</p>}
+        {textColor && <p className="text-xs text-muted-foreground">{t('chat.readable')}</p>}
       </Group>
 
       {!isDefault && (
         <div className="flex justify-end">
           <Button type="button" variant="ghost" size="sm" onClick={reset} className="gap-1.5 text-xs">
             <RotateCcw className="size-3.5" />
-            Reset chat text
+            {t('chat.reset')}
           </Button>
         </div>
       )}

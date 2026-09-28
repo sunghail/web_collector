@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('app:check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('app:download-update'),
   installUpdate: () => ipcRenderer.invoke('app:install-update'),
+  showMainWindow: () => ipcRenderer.send('app:show-main-window'),
   openUrls: (urls: string[]) => ipcRenderer.invoke('open-urls', urls),
   openPath: (targetPath: string) => ipcRenderer.send('open-path', targetPath),
   openWidget: (category: { categoryId: string; categoryName: string; categoryColor: string; defaultFaviconId?: string | null }) =>

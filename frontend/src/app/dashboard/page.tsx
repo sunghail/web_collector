@@ -22,6 +22,8 @@ import { ShareToChatDialog } from '@/components/chat/ShareToChatDialog';
 import type { ChatPlace } from '@/lib/shareToChat';
 import { QuickOpen } from '@/components/links/QuickOpen';
 import { useMyProfile } from '@/lib/myProfile';
+import { useMessageNotifications, type SocialSummary } from '@/hooks/useMessageNotifications';
+import { useNotificationPreferences } from '@/lib/notificationPreferences';
 import type { SocialView } from '@/components/layout/Sidebar';
 import { LinkGrid } from '@/components/links/LinkGrid';
 import { AddLinkDialog } from '@/components/links/AddLinkDialog';
@@ -43,11 +45,13 @@ export default function DashboardPage() {
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [socialBadges, setSocialBadges] = useState({ unreadMessages: 0, pendingRequests: 0, communityMentions: 0 });
   const loadMyProfile = useMyProfile((state) => state.load);
+  const [socialSummary, setSocialSummary] = useState<SocialSummary | null>(null);
 
   // Sidebar badges for unread chat messages and friend requests.
   const refreshSocialBadges = useCallback(async () => {
     try {
       const response = await api.get('/social/summary');
+      setSocialSummary(response.data);
       setSocialBadges({
         unreadMessages: response.data.unreadMessages ?? 0,
         pendingRequests: response.data.pendingRequests ?? 0,
@@ -156,7 +160,9 @@ export default function DashboardPage() {
     if (!isAuthenticated) return;
     refreshSocialBadges();
     loadMyProfile();
-    const timer = window.setInterval(() => !document.hidden && refreshSocialBadges(), 20000);
+    const timer = window.setInterval(() => {
+      if (!document.hidden || useNotificationPreferences.getState().enabled) refreshSocialBadges();
+    }, 20000);
     return () => window.clearInterval(timer);
   }, [isAuthenticated, refreshSocialBadges, loadMyProfile]);
 
@@ -559,6 +565,13 @@ export default function DashboardPage() {
       setView('chats');
     }
   };
+
+  // Pop-up notifications for new messages, following the settings.
+  useMessageNotifications(socialSummary, {
+    view,
+    activeRoomId,
+    onOpen: (place, messageId) => openChat(place, messageId ?? null),
+  });
 
   // Saving from a chat can add links and, for a shared category, a category too.
   const handleLinkSavedFromChat = () => {

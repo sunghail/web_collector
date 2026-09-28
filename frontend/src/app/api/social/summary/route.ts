@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
-import { isMissingTable, listRoomsFor, unseenMentions } from '@/lib/chat-server';
+import { isMissingTable, listRoomsFor, mentionDetails, unseenMentions } from '@/lib/chat-server';
 
-// GET /api/social/summary -> numbers for the sidebar badges
+// GET /api/social/summary -> numbers for the sidebar badges, and what message notifications need
 export async function GET() {
   const authUser = await getAuthUser();
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const [{ count: pendingRequests, error }, rooms, mentions] = await Promise.all([
+    const [{ count: pendingRequests, error }, rooms, mentions, mentionInfo] = await Promise.all([
       supabaseAdmin
         .from('friendships')
         .select('id', { count: 'exact', head: true })
@@ -17,6 +17,7 @@ export async function GET() {
         .eq('status', 'pending'),
       listRoomsFor(authUser.userId),
       unseenMentions(authUser.userId),
+      mentionDetails(authUser.userId),
     ]);
     if (error) throw error;
     return NextResponse.json({
@@ -24,6 +25,18 @@ export async function GET() {
       unreadMessages: rooms.reduce((sum, room) => sum + room.unread, 0),
       // @mentions not seen yet: the community room has no unread count of its own, so these show there.
       mentions,
+      // For notifications: each room's newest message and unread count, and unseen mentions.
+      rooms: rooms.map((room) => ({
+        id: room.id,
+        title: room.title,
+        isDirect: room.isDirect,
+        unread: room.unread,
+        lastMessage: room.lastMessage,
+        lastMessageAt: room.lastMessageAt,
+        person: room.person ?? null,
+        hasUnseenMention: mentionInfo.roomIds.includes(room.id),
+      })),
+      communityMention: mentionInfo.community,
     });
   } catch (error) {
     // Before the friends migration runs, just show no badges.
