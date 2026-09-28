@@ -29,7 +29,7 @@ function pickAsset(assets: GitHubAsset[], extension: string): InstallerInfo | nu
   return asset ? { name: asset.name, size: asset.size, url: asset.browser_download_url } : null;
 }
 
-/** The latest published release, or null when there is none yet. Cached for 10 minutes. */
+/** The latest published release, or null when there is none yet. Cached for 5 minutes, so a new release shows up soon after it is published. */
 export async function getLatestRelease(): Promise<LatestRelease | null> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
@@ -40,7 +40,7 @@ export async function getLatestRelease(): Promise<LatestRelease | null> {
 
   const response = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
     headers,
-    next: { revalidate: 600 },
+    next: { revalidate: 300 },
   });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`GitHub responded ${response.status}`);
