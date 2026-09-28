@@ -3,6 +3,7 @@ import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { PWAProvider } from "@/components/providers/PWAProvider";
+import { UpdateNotice } from "@/components/providers/UpdateNotice";
 import { Toaster } from "@/components/ui/sonner";
 import { appearanceBootScript } from "@/lib/appearance";
 
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <PWAProvider />
+          <UpdateNotice />
           {children}
           <Toaster position="bottom-center" />
         </ThemeProvider>
