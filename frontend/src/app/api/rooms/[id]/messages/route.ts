@@ -9,6 +9,7 @@ import {
   parseMessageInput,
   setupRequired,
   toChatMessages,
+  toChatMessagesWithReactions,
   tooFastResponse,
   type MessageRow,
 } from '@/lib/chat-server';
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .order('created_at', { ascending: true })
         .limit(200);
       if (error) throw error;
-      return NextResponse.json({ messages: await toChatMessages(data as MessageRow[]), hasMore: false });
+      return NextResponse.json({ messages: await toChatMessagesWithReactions('chat_message_reactions', data as MessageRow[], authUser.userId), hasMore: false });
     }
 
     let query = supabaseAdmin
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const rows = data as MessageRow[];
     return NextResponse.json({
-      messages: await toChatMessages(rows.slice(0, PAGE_SIZE).reverse()),
+      messages: await toChatMessagesWithReactions('chat_message_reactions', rows.slice(0, PAGE_SIZE).reverse(), authUser.userId),
       hasMore: rows.length > PAGE_SIZE,
     });
   } catch (error) {

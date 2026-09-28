@@ -106,11 +106,12 @@ npm install
 ### 4. DB 설정
 Supabase 대시보드 → **SQL Editor**에서 실행합니다.
 
-- **새 프로젝트**: `supabase/00_setup_new_project.sql` **하나만** 실행하면 필요한 표 10개가 모두 만들어집니다.
+- **새 프로젝트**: `supabase/00_setup_new_project.sql` **하나만** 실행하면 필요한 표 12개가 모두 만들어집니다.
 - **이미 쓰던 DB**: 날짜가 붙은 파일을 날짜순으로 실행합니다.
   1. `20260427_add_category_default_favicon_id.sql` — 카테고리 기본 아이콘
   2. `20260923_add_community_messages.sql` — 커뮤니티
   3. `20260927_add_friends_and_chat_rooms.sql` — 공개 ID, 친구, 톡방
+  4. `20260928_add_message_reactions.sql` — 메시지 공감 표시
 
 모든 표는 RLS로 잠가 두어 공개 키로는 접근할 수 없고, 앱 서버(관리자 키)로만 읽고 씁니다.
 

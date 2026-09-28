@@ -9,6 +9,7 @@ import {
   hostnameOf,
   normalizeShareUrl,
   type ChatMessage,
+  type Reaction,
   type RoomSummary,
 } from '@/lib/chat';
 
@@ -95,7 +96,7 @@ export interface MessageRow {
   created_at: string;
 }
 
-export async function toChatMessages(rows: MessageRow[]): Promise<ChatMessage[]> {
+export async function toChatMessages(rows: MessageRow[], reactions?: Map<string, Reaction[]>): Promise<ChatMessage[]> {
   const handles = await handlesFor(rows.map((row) => row.user_id));
   return rows.map((row) => ({
     id: row.id,
@@ -106,7 +107,82 @@ export async function toChatMessages(rows: MessageRow[]): Promise<ChatMessage[]>
     linkUrl: row.link_url,
     linkTitle: row.link_title,
     createdAt: row.created_at,
+    reactions: reactions?.get(row.id) ?? [],
   }));
+}
+
+// ---------- Reactions ----------
+
+export type ReactionTable = 'community_message_reactions' | 'chat_message_reactions';
+
+// Message ids go in the request address; keep each request well under URL length limits.
+const REACTION_ID_CHUNK = 100;
+
+/** Reactions for the given messages, grouped per message. Empty before the reactions migration runs. */
+export async function reactionsFor(table: ReactionTable, messageIds: string[], viewerId: string): Promise<Map<string, Reaction[]>> {
+  const result = new Map<string, Reaction[]>();
+  const rows: { message_id: string; user_id: string; emoji: string }[] = [];
+  for (let i = 0; i < messageIds.length; i += REACTION_ID_CHUNK) {
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .select('message_id, user_id, emoji, created_at')
+      .in('message_id', messageIds.slice(i, i + REACTION_ID_CHUNK))
+      .order('created_at', { ascending: true });
+    if (isMissingTable(error)) return result;
+    if (error) throw error;
+    rows.push(...(data ?? []));
+  }
+
+  const handles = await handlesFor(rows.map((row) => row.user_id));
+  for (const row of rows) {
+    const list = result.get(row.message_id) ?? [];
+    let reaction = list.find((r) => r.emoji === row.emoji);
+    if (!reaction) {
+      reaction = { emoji: row.emoji, count: 0, mine: false, handles: [] };
+      list.push(reaction);
+    }
+    reaction.count++;
+    if (row.user_id === viewerId) reaction.mine = true;
+    reaction.handles.push(handles.get(row.user_id) || fallbackHandle(row.user_id));
+    result.set(row.message_id, list);
+  }
+  return result;
+}
+
+/** Messages ready for the browser, with the viewer's view of their reactions. */
+export async function toChatMessagesWithReactions(table: ReactionTable, rows: MessageRow[], viewerId: string) {
+  const reactable = rows.filter((row) => (row.kind ?? 'user') === 'user').map((row) => row.id);
+  return toChatMessages(rows, await reactionsFor(table, reactable, viewerId));
+}
+
+/**
+ * Adds (POST) or removes (DELETE) the viewer's reaction, then returns the message's reactions.
+ * The route must already have checked that the viewer may see the message.
+ */
+export async function changeReaction(
+  table: ReactionTable,
+  messageId: string,
+  viewerId: string,
+  emoji: string,
+  add: boolean
+): Promise<Reaction[]> {
+  if (add) {
+    const { error } = await supabaseAdmin
+      .from(table)
+      .upsert({ message_id: messageId, user_id: viewerId, emoji }, { onConflict: 'message_id,user_id,emoji', ignoreDuplicates: true });
+    if (error) throw error;
+  } else {
+    const { error } = await supabaseAdmin.from(table).delete().eq('message_id', messageId).eq('user_id', viewerId).eq('emoji', emoji);
+    if (error) throw error;
+  }
+  return (await reactionsFor(table, [messageId], viewerId)).get(messageId) ?? [];
+}
+
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** "?ids=a,b,c" -> up to 200 valid message ids. */
+export function parseMessageIds(value: string | null) {
+  return [...new Set((value ?? '').split(',').filter((id) => UUID_PATTERN.test(id)))].slice(0, 200);
 }
 
 /** Validates a message sent from the composer. */

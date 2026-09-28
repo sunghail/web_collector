@@ -2,20 +2,41 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDown, BookmarkPlus, ExternalLink, Link2, SendHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, BookmarkPlus, ExternalLink, Link2, SendHorizontal, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
-import { MESSAGE_MAX_LENGTH, hostnameOf, type ChatMessage } from '@/lib/chat';
+import { MESSAGE_MAX_LENGTH, hostnameOf, type ChatMessage, type Reaction } from '@/lib/chat';
 import { chatFontFamily, useChatPreferences } from '@/lib/chatPreferences';
 import { ShareSiteDialog, type SharedSite } from './ShareSiteDialog';
 import { SiteIcon } from './SiteIcon';
+import { MessageActions, ReactionChips } from './Reactions';
 
 const POLL_MS = 4000;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
 // Ctrl + wheel changes the text size one step per mouse notch; touchpad pinches send many small deltas.
 const WHEEL_STEP_DELTA = 40;
+// Reactions on messages already shown are refreshed every other poll, for the latest messages only.
+const REACTION_REFRESH_EVERY = 2;
+const REACTION_REFRESH_LIMIT = 100;
+
+function sameReactions(a: Reaction[], b: Reaction[]) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** What the reactions look like right after clicking, before the server answers. */
+function toggledLocally(reactions: Reaction[], emoji: string, add: boolean): Reaction[] {
+  const existing = reactions.find((r) => r.emoji === emoji);
+  if (add) {
+    if (existing) return reactions.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1, mine: true } : r));
+    return [...reactions, { emoji, count: 1, mine: true, handles: [] }];
+  }
+  if (!existing) return reactions;
+  return existing.count <= 1
+    ? reactions.filter((r) => r.emoji !== emoji)
+    : reactions.map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, mine: false } : r));
+}
 
 export interface ChatThreadProps {
   /** API path for this thread's messages, e.g. "/community/messages" or "/rooms/<id>/messages". */
@@ -118,6 +139,11 @@ export function ChatThread({
   const lastCreatedAt = useRef<string | null>(null);
   // How to adjust the scroll after the next render: stick to the bottom, or keep place after loading older messages.
   const pendingScroll = useRef<{ type: 'bottom' } | { type: 'keep'; previousHeight: number } | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
+  // Messages whose reaction is on its way to the server; a refresh must not undo the click meanwhile.
+  const reactionsInFlight = useRef(new Set<string>());
+  const pollCount = useRef(0);
   const callbacks = useRef({ onSeen, onGone });
   callbacks.current = { onSeen, onGone };
 
@@ -169,8 +195,29 @@ export function ChatThread({
   }, [endpoint, handleFailure]);
 
   // Check for new messages every few seconds while the page is visible.
+  const refreshReactions = useCallback(async () => {
+    const shown = messagesRef.current.filter((m) => m.kind === 'user').slice(-REACTION_REFRESH_LIMIT);
+    if (shown.length === 0) return;
+    const response = await api.get(`${endpoint}/reactions`, { params: { ids: shown.map((m) => m.id).join(',') } });
+    const latest: Record<string, Reaction[]> = response.data.reactions || {};
+    const shownIds = new Set(shown.map((m) => m.id));
+    let changed = false;
+    const next = messagesRef.current.map((m) => {
+      if (!shownIds.has(m.id) || reactionsInFlight.current.has(m.id)) return m;
+      const reactions = latest[m.id] ?? [];
+      if (sameReactions(m.reactions, reactions)) return m;
+      changed = true;
+      return { ...m, reactions };
+    });
+    if (!changed) return;
+    if (isNearBottom()) pendingScroll.current = { type: 'bottom' };
+    setMessages(next);
+  }, [endpoint]);
+
   const pollNewer = useCallback(async () => {
     if (!lastCreatedAt.current || document.hidden) return;
+    pollCount.current += 1;
+    if (pollCount.current % REACTION_REFRESH_EVERY === 0) refreshReactions().catch(() => undefined);
     try {
       const response = await api.get(endpoint, { params: { after: lastCreatedAt.current } });
       const incoming: ChatMessage[] = response.data.messages || [];
@@ -183,7 +230,7 @@ export function ChatThread({
       // A missed poll is fine; the next one catches up. Leaving a room is not.
       if (isGone(error)) callbacks.current.onGone?.();
     }
-  }, [endpoint, mergeNewer]);
+  }, [endpoint, mergeNewer, refreshReactions]);
 
   useEffect(() => {
     if (needsSetup) return;
@@ -281,6 +328,28 @@ export function ChatThread({
       setMessages((current) => current.filter((m) => m.id !== message.id));
     } catch (error) {
       handleFailure(error, 'Could not delete the message');
+    }
+  };
+
+  const setReactions = (messageId: string, reactions: Reaction[]) => {
+    if (isNearBottom()) pendingScroll.current = { type: 'bottom' };
+    setMessages((current) => current.map((m) => (m.id === messageId ? { ...m, reactions } : m)));
+  };
+
+  const toggleReaction = async (message: ChatMessage, emoji: string) => {
+    const shown = messagesRef.current.find((m) => m.id === message.id) ?? message;
+    const add = !shown.reactions.find((r) => r.emoji === emoji)?.mine;
+    const path = `${endpoint}/${message.id}/reactions`;
+    reactionsInFlight.current.add(message.id);
+    setReactions(message.id, toggledLocally(shown.reactions, emoji, add));
+    try {
+      const response = add ? await api.post(path, { emoji }) : await api.delete(path, { params: { emoji } });
+      setReactions(message.id, response.data.reactions || []);
+    } catch (error) {
+      setReactions(message.id, shown.reactions);
+      handleFailure(error, 'Could not update the reaction');
+    } finally {
+      reactionsInFlight.current.delete(message.id);
     }
   };
 
@@ -409,18 +478,12 @@ export function ChatThread({
                         </p>
                       )}
                       <SharedSiteCard message={message} canSave={!isMine} onSave={() => saveSite(message)} />
+                      <ReactionChips reactions={message.reactions ?? []} onToggle={(emoji) => toggleReaction(message, emoji)} />
                     </div>
-                    {isMine && (
-                      <button
-                        type="button"
-                        onClick={() => remove(message)}
-                        aria-label="Delete message"
-                        title="Delete"
-                        className="absolute right-2 top-1 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    )}
+                    <MessageActions
+                      onReact={(emoji) => toggleReaction(message, emoji)}
+                      onDelete={isMine ? () => remove(message) : undefined}
+                    />
                   </div>
                 </div>
               );

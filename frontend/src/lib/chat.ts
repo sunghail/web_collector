@@ -11,6 +11,33 @@ export interface ChatMessage {
   linkUrl: string | null;
   linkTitle: string | null;
   createdAt: string;
+  /** Emoji reactions, in the order each emoji was first used. Empty for system notes. */
+  reactions: Reaction[];
+}
+
+export interface Reaction {
+  emoji: string;
+  count: number;
+  /** Whether the person viewing reacted with this emoji. */
+  mine: boolean;
+  /** @IDs of everyone who reacted, for the tooltip. */
+  handles: string[];
+}
+
+/** Shown when pointing at a message. */
+export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+/** Behind the + button. */
+export const MORE_REACTIONS: { label: string; emojis: string[] }[] = [
+  { label: 'Reactions', emojis: ['👏', '🎉', '🔥', '💯', '✨', '😍'] },
+  { label: 'Check & opinion', emojis: ['✅', '👀', '🤔', '👌', '🙌', '💡'] },
+  { label: 'For links', emojis: ['🔖', '📌', '🚀', '⭐'] },
+];
+
+const ALLOWED_REACTIONS = new Set([...QUICK_REACTIONS, ...MORE_REACTIONS.flatMap((group) => group.emojis)]);
+
+export function isAllowedReaction(value: unknown): value is string {
+  return typeof value === 'string' && ALLOWED_REACTIONS.has(value);
 }
 
 export interface Person {
