@@ -7,12 +7,15 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
 import { MESSAGE_MAX_LENGTH, hostnameOf, type ChatMessage } from '@/lib/chat';
+import { chatFontFamily, useChatPreferences } from '@/lib/chatPreferences';
 import { ShareSiteDialog, type SharedSite } from './ShareSiteDialog';
 import { SiteIcon } from './SiteIcon';
 
 const POLL_MS = 4000;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
+// Ctrl + wheel changes the text size one step per mouse notch; touchpad pinches send many small deltas.
+const WHEEL_STEP_DELTA = 40;
 
 export interface ChatThreadProps {
   /** API path for this thread's messages, e.g. "/community/messages" or "/rooms/<id>/messages". */
@@ -64,7 +67,7 @@ function SharedSiteCard({ message, canSave, onSave }: { message: ChatMessage; ca
   const iconButton =
     'flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground';
   return (
-    <div className="mt-1.5 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-2.5 pr-2 shadow-card">
+    <div className="mt-1.5 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-2.5 pr-2 font-sans shadow-card">
       <SiteIcon url={message.linkUrl} />
       <a href={message.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="min-w-0 flex-1 outline-none focus-visible:underline">
         <span className="block truncate text-[13px] font-semibold">{message.linkTitle || hostnameOf(message.linkUrl)}</span>
@@ -106,7 +109,10 @@ export function ChatThread({
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [hasUnseen, setHasUnseen] = useState(false);
+  const [sizeHint, setSizeHint] = useState<number | null>(null);
+  const { fontSize, font, textColor, hydrate: hydrateChatPreferences } = useChatPreferences();
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastCreatedAt = useRef<string | null>(null);
@@ -200,7 +206,38 @@ export function ChatThread({
       el.scrollTop += el.scrollHeight - pending.previousHeight;
     }
     pendingScroll.current = null;
-  }, [messages]);
+  }, [messages, fontSize, font]);
+
+  useEffect(() => {
+    hydrateChatPreferences();
+  }, [hydrateChatPreferences]);
+
+  // Ctrl + wheel inside the chat resizes its text instead of zooming the whole page.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let pending = 0;
+    let hintTimer: number | undefined;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      pending += event.deltaY;
+      if (Math.abs(pending) < WHEEL_STEP_DELTA) return;
+      const step = pending < 0 ? 1 : -1;
+      pending = 0;
+      const { fontSize: current, setPreferences } = useChatPreferences.getState();
+      if (isNearBottom()) pendingScroll.current = { type: 'bottom' };
+      setPreferences({ fontSize: current + step });
+      setSizeHint(useChatPreferences.getState().fontSize);
+      window.clearTimeout(hintTimer);
+      hintTimer = window.setTimeout(() => setSizeHint(null), 900);
+    };
+    root.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      root.removeEventListener('wheel', onWheel);
+      window.clearTimeout(hintTimer);
+    };
+  }, []);
 
   const loadEarlier = async () => {
     if (!messages.length) return;
@@ -266,14 +303,20 @@ export function ChatThread({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [text]);
+  }, [text, fontSize, font]);
 
   const remaining = MESSAGE_MAX_LENGTH - text.length;
   const canSend = (text.trim().length > 0 || attachment !== null) && remaining >= 0 && !isSending && !needsSetup;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={rootRef} className="relative flex h-full min-h-0 flex-col">
       {header}
+
+      {sizeHint !== null && (
+        <div className="pointer-events-none absolute left-1/2 top-20 z-20 -translate-x-1/2 rounded-full bg-foreground/85 px-3 py-1 text-xs font-medium tabular-nums text-background shadow-raised" role="status">
+          Text size {sizeHint}px
+        </div>
+      )}
 
       <div ref={scrollRef} className="custom-scrollbar relative min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8">
         {isLoading && (
@@ -297,7 +340,7 @@ export function ChatThread({
         )}
 
         {!isLoading && !needsSetup && messages.length > 0 && (
-          <div className="mx-auto max-w-3xl">
+          <div className="mx-auto max-w-3xl" style={{ fontSize, fontFamily: chatFontFamily(font) }}>
             {hasMore && (
               <div className="mb-4 flex justify-center">
                 <Button variant="outline" size="sm" onClick={loadEarlier} disabled={isLoadingEarlier}>
@@ -311,7 +354,7 @@ export function ChatThread({
               const date = new Date(message.createdAt);
               const newDay = !previous || new Date(previous.createdAt).toDateString() !== date.toDateString();
               const dayDivider = newDay && (
-                <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="my-4 flex items-center gap-3 text-[0.86em] text-muted-foreground">
                   <span className="h-px flex-1 bg-border" />
                   {dayLabel(date)}
                   <span className="h-px flex-1 bg-border" />
@@ -322,7 +365,7 @@ export function ChatThread({
                 return (
                   <div key={message.id}>
                     {dayDivider}
-                    <p className="my-3 text-center text-xs text-muted-foreground">{message.body}</p>
+                    <p className="my-3 text-center text-[0.86em] text-muted-foreground">{message.body}</p>
                   </div>
                 );
               }
@@ -341,7 +384,7 @@ export function ChatThread({
                     <div className="w-8 shrink-0">
                       {!continues && (
                         <div
-                          className={`flex size-8 items-center justify-center rounded-full text-xs font-semibold ${
+                          className={`flex size-8 items-center justify-center rounded-full font-sans text-xs font-semibold ${
                             isMine ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
                           }`}
                           aria-hidden="true"
@@ -353,14 +396,18 @@ export function ChatThread({
                     <div className="min-w-0 flex-1">
                       {!continues && (
                         <div className="flex items-baseline gap-2">
-                          <span className="text-[13px] font-semibold">{message.authorHandle}</span>
-                          {isMine && <span className="text-[11px] text-muted-foreground">you</span>}
-                          <time className="text-[11px] text-muted-foreground" dateTime={message.createdAt}>
+                          <span className="text-[0.93em] font-semibold">{message.authorHandle}</span>
+                          {isMine && <span className="text-[0.79em] text-muted-foreground">you</span>}
+                          <time className="text-[0.79em] text-muted-foreground" dateTime={message.createdAt}>
                             {timeFormat.format(date)}
                           </time>
                         </div>
                       )}
-                      {message.body && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>}
+                      {message.body && (
+                        <p className="whitespace-pre-wrap break-words leading-relaxed" style={textColor ? { color: textColor } : undefined}>
+                          {message.body}
+                        </p>
+                      )}
                       <SharedSiteCard message={message} canSave={!isMine} onSave={() => saveSite(message)} />
                     </div>
                     {isMine && (
@@ -450,7 +497,8 @@ export function ChatThread({
               disabled={needsSetup}
               placeholder={placeholder}
               aria-label="Message"
-              className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground"
+              className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 outline-none placeholder:text-muted-foreground"
+              style={{ fontSize, fontFamily: chatFontFamily(font) }}
             />
             <Button type="submit" size="icon" disabled={!canSend} aria-label="Send" className="size-9 shrink-0">
               <SendHorizontal className="size-4" />

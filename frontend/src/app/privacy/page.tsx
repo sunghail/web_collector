@@ -48,7 +48,8 @@ export default function PrivacyPage() {
         <p>
           Data is stored in a Supabase database in Seoul, South Korea, and the website runs on Vercel. To show site icons,
           the address of each saved site (for example <code>example.com</code>) is sent to Google&apos;s public icon service.
-          The desktop app checks GitHub for new versions.
+          The extra chat fonts are downloaded from Google Fonts when you open the chat settings or use one of them. The
+          desktop app checks GitHub for new versions.
         </p>
       </section>
 

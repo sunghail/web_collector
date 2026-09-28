@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Info, LayoutGrid, Palette, Settings } from 'lucide-react';
+import { Info, LayoutGrid, MessageSquare, Palette, Settings } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -13,12 +13,14 @@ import {
 import { WebStyleSettings } from '@/components/settings/WebStyleSettings';
 import { LinkCardSettings } from '@/components/settings/LinkCardSettings';
 import { AppSettings } from '@/components/settings/AppSettings';
+import { ChatSettings } from '@/components/settings/ChatSettings';
 
-type Tab = 'style' | 'cards' | 'app';
+type Tab = 'style' | 'cards' | 'chat' | 'app';
 
 const tabs: { id: Tab; name: string; icon: React.ReactNode }[] = [
   { id: 'style', name: 'Web style', icon: <Palette className="size-4" /> },
   { id: 'cards', name: 'Link cards', icon: <LayoutGrid className="size-4" /> },
+  { id: 'chat', name: 'Chat', icon: <MessageSquare className="size-4" /> },
   { id: 'app', name: 'App', icon: <Info className="size-4" /> },
 ];
 
@@ -56,7 +58,7 @@ export function OptionsDialog({ triggerClassName }: { triggerClassName?: string 
                     ${isSelected ? 'bg-card font-medium text-foreground shadow-card' : 'text-muted-foreground hover:text-foreground'}
                   `}
                 >
-                  {option.icon}
+                  <span className="hidden sm:inline-flex">{option.icon}</span>
                   {option.name}
                 </button>
               );
@@ -72,6 +74,7 @@ export function OptionsDialog({ triggerClassName }: { triggerClassName?: string 
         >
           {tab === 'style' && <WebStyleSettings />}
           {tab === 'cards' && <LinkCardSettings />}
+          {tab === 'chat' && <ChatSettings />}
           {tab === 'app' && (
             <div className="max-w-[492px]">
               <AppSettings />
