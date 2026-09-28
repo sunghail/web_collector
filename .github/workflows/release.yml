@@ -38,6 +38,15 @@ jobs:
             echo "::error::Set the WEB_COLLECTOR_APP_URL variable (Settings -> Secrets and variables -> Actions -> Variables)."
             exit 1
           fi
+      # Windows and Mac build at the same time; creating the draft first stops them from making two.
+      - name: Create the draft release both builds upload to
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft \
+              --title "Web Collector ${GITHUB_REF_NAME#v}" --generate-notes
+          fi
 
   windows:
     name: Windows installer
