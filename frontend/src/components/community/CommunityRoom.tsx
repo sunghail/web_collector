@@ -8,10 +8,13 @@ interface CommunityRoomProps {
   onOpenSidebar: () => void;
   /** Called after a shared site is saved, so the link list can refresh. */
   onLinkSaved: () => void;
+  /** A message to scroll to, e.g. when coming from the Link history. */
+  focusMessageId?: string | null;
+  onFocused?: () => void;
 }
 
 /** The one open room everyone shares. */
-export function CommunityRoom({ currentUserId, onOpenSidebar, onLinkSaved }: CommunityRoomProps) {
+export function CommunityRoom({ currentUserId, onOpenSidebar, onLinkSaved, focusMessageId, onFocused }: CommunityRoomProps) {
   return (
     <div className="h-dvh">
       <ChatThread
@@ -27,6 +30,8 @@ export function CommunityRoom({ currentUserId, onOpenSidebar, onLinkSaved }: Com
           </>
         }
         onLinkSaved={onLinkSaved}
+        focusMessageId={focusMessageId}
+        onFocused={onFocused}
         header={
           <header className="shrink-0 border-b border-border/80 bg-background/85 backdrop-blur-md">
             <div className="flex h-16 items-center gap-3 px-4 md:px-8">

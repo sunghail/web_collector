@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Link as LinkType } from '@/types';
 import { getFallbackFaviconDataUrl, normalizeFallbackFaviconDataUrl } from '@/lib/fallbackFavicons';
+import { useShareToChat } from '@/lib/shareToChat';
 import { CardMenu, CardShell, FaviconTile, stopDragKeys, useCardStyle } from './CardParts';
 
 interface LinkCardProps {
@@ -64,7 +65,12 @@ export function LinkCard({ link, categoryDefaultFaviconId, onEdit, onDelete }: L
           </span>
         </span>
       </a>
-      <CardMenu label={`${link.title} menu`} onEdit={() => onEdit(link)} onDelete={() => onDelete(link.id)} />
+      <CardMenu
+        label={`${link.title} menu`}
+        onEdit={() => onEdit(link)}
+        onDelete={() => onDelete(link.id)}
+        onShare={() => useShareToChat.getState().open({ kind: 'links', links: [{ url: link.url, title: link.title, memo: link.memo || null }] })}
+      />
     </CardShell>
   );
 }

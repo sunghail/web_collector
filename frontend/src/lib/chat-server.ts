@@ -3,14 +3,19 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import {
+  COLLECTION_NAME_MAX_LENGTH,
   HANDLE_PATTERN,
+  LINK_MEMO_MAX_LENGTH,
   LINK_TITLE_MAX_LENGTH,
+  MAX_LINKS_PER_MESSAGE,
   MESSAGE_MAX_LENGTH,
   hostnameOf,
   normalizeShareUrl,
   type ChatMessage,
+  type LinkHistoryItem,
   type Reaction,
   type RoomSummary,
+  type SharedLink,
 } from '@/lib/chat';
 
 type DbError = { code?: string; message?: string } | null;
@@ -93,40 +98,281 @@ export interface MessageRow {
   body: string;
   link_url: string | null;
   link_title: string | null;
+  collection_name?: string | null;
   created_at: string;
 }
 
-export async function toChatMessages(rows: MessageRow[], reactions?: Map<string, Reaction[]>): Promise<ChatMessage[]> {
-  const handles = await handlesFor(rows.map((row) => row.user_id));
+/** The community room, or a chat room. They keep messages, links and reactions in separate tables. */
+export type MessageSource = 'community' | 'room';
+
+const LINK_MESSAGE_COLUMN = { community: 'community_message_id', room: 'chat_message_id' } as const;
+const REACTION_TABLE = { community: 'community_message_reactions', room: 'chat_message_reactions' } as const;
+// Message ids go in the request address; keep each request well under URL length limits.
+const ID_CHUNK = 100;
+
+/** Sites shared with each message, in order. Null before the shared links migration runs. */
+async function sharedLinksFor(source: MessageSource, messageIds: string[]): Promise<Map<string, SharedLink[]> | null> {
+  const column = LINK_MESSAGE_COLUMN[source];
+  const result = new Map<string, SharedLink[]>();
+  for (let i = 0; i < messageIds.length; i += ID_CHUNK) {
+    const { data, error } = await supabaseAdmin
+      .from('shared_links')
+      .select(`${column}, url, title, memo, position`)
+      .in(column, messageIds.slice(i, i + ID_CHUNK))
+      .order('position', { ascending: true });
+    if (isMissingTable(error)) return null;
+    if (error) throw error;
+    for (const row of (data ?? []) as unknown as Record<string, string | null>[]) {
+      const messageId = row[column] as string;
+      const list = result.get(messageId) ?? [];
+      list.push({ url: row.url as string, title: row.title as string, memo: row.memo });
+      result.set(messageId, list);
+    }
+  }
+  return result;
+}
+
+/** Messages ready for the browser: authors' @IDs, shared sites and the viewer's view of reactions. */
+export async function buildMessages(source: MessageSource, rows: MessageRow[], viewerId: string): Promise<ChatMessage[]> {
+  const userRows = rows.filter((row) => (row.kind ?? 'user') === 'user').map((row) => row.id);
+  const [handles, links, reactions] = await Promise.all([
+    handlesFor(rows.map((row) => row.user_id)),
+    sharedLinksFor(source, userRows),
+    reactionsFor(REACTION_TABLE[source], userRows, viewerId),
+  ]);
   return rows.map((row) => ({
     id: row.id,
     userId: row.user_id,
     authorHandle: (row.user_id && handles.get(row.user_id)) || fallbackHandle(row.user_id),
     kind: row.kind ?? 'user',
     body: row.body,
-    linkUrl: row.link_url,
-    linkTitle: row.link_title,
+    // Messages from before the shared links table only have the one site stored on the message itself.
+    links:
+      links?.get(row.id) ??
+      (row.link_url ? [{ url: row.link_url, title: row.link_title || hostnameOf(row.link_url), memo: null }] : []),
+    collectionName: row.collection_name ?? null,
     createdAt: row.created_at,
-    reactions: reactions?.get(row.id) ?? [],
+    reactions: reactions.get(row.id) ?? [],
   }));
+}
+
+export interface MessageInput {
+  body: string;
+  links: SharedLink[];
+  collectionName: string | null;
+}
+
+/**
+ * Validates a message sent from the composer: text, and any number of shared sites (up to a limit),
+ * each with an optional note. Older pages send a single linkUrl/linkTitle, which still works.
+ */
+export function parseMessageInput(payload: {
+  body?: unknown;
+  links?: unknown;
+  linkUrl?: unknown;
+  linkTitle?: unknown;
+  collectionName?: unknown;
+}): MessageInput | { error: string } {
+  const body = typeof payload.body === 'string' ? payload.body.trim() : '';
+  if (body.length > MESSAGE_MAX_LENGTH) return { error: `Messages can be up to ${MESSAGE_MAX_LENGTH} characters` };
+
+  const hasLegacyLink = payload.linkUrl !== undefined && payload.linkUrl !== null && payload.linkUrl !== '';
+  const rawLinks: unknown[] = Array.isArray(payload.links)
+    ? payload.links
+    : hasLegacyLink
+      ? [{ url: payload.linkUrl, title: payload.linkTitle }]
+      : [];
+  if (rawLinks.length > MAX_LINKS_PER_MESSAGE) return { error: `You can share up to ${MAX_LINKS_PER_MESSAGE} sites at once` };
+
+  const links: SharedLink[] = [];
+  for (const raw of rawLinks) {
+    const item = (raw ?? {}) as { url?: unknown; title?: unknown; memo?: unknown };
+    const url = normalizeShareUrl(item.url);
+    if (!url) return { error: 'Only http and https addresses can be shared' };
+    if (links.some((link) => link.url === url)) continue;
+    const rawTitle = typeof item.title === 'string' ? item.title.trim() : '';
+    const memo = typeof item.memo === 'string' ? item.memo.trim() : '';
+    if (memo.length > LINK_MEMO_MAX_LENGTH) return { error: `Notes can be up to ${LINK_MEMO_MAX_LENGTH} characters` };
+    links.push({ url, title: (rawTitle || hostnameOf(url)).slice(0, LINK_TITLE_MAX_LENGTH), memo: memo || null });
+  }
+
+  if (!body && links.length === 0) return { error: 'Write a message or attach a site' };
+  const rawCollection = typeof payload.collectionName === 'string' ? payload.collectionName.trim() : '';
+  const collectionName = links.length > 0 && rawCollection ? rawCollection.slice(0, COLLECTION_NAME_MAX_LENGTH) : null;
+  return { body, links, collectionName };
+}
+
+/** The columns to insert for a new message; the first site also stays on the message for older pages. */
+export function messageColumns(input: MessageInput) {
+  return {
+    body: input.body,
+    link_url: input.links[0]?.url ?? null,
+    link_title: input.links[0]?.title ?? null,
+    ...(input.collectionName ? { collection_name: input.collectionName } : {}),
+  };
+}
+
+/**
+ * Whether a message can be stored. Before the shared links migration runs, only a single site
+ * without a note (the old kind of message) fits.
+ */
+export async function canStoreLinks(input: MessageInput) {
+  const needsTable = input.links.length > 1 || input.links.some((link) => link.memo) || Boolean(input.collectionName);
+  if (!needsTable) return true;
+  const { error } = await supabaseAdmin.from('shared_links').select('id', { head: true }).limit(1);
+  if (isMissingTable(error)) return false;
+  if (error) throw error;
+  return true;
+}
+
+/** Records the sites shared with a new message, for the message itself and the Link history. */
+export async function saveSharedLinks(
+  source: MessageSource,
+  messageId: string,
+  roomId: string | null,
+  userId: string,
+  links: SharedLink[]
+) {
+  if (links.length === 0) return;
+  const { error } = await supabaseAdmin.from('shared_links').insert(
+    links.map((link, position) => ({
+      [LINK_MESSAGE_COLUMN[source]]: messageId,
+      room_id: source === 'room' ? roomId : null,
+      user_id: userId,
+      url: link.url,
+      title: link.title,
+      memo: link.memo,
+      position,
+    }))
+  );
+  // Before the migration a single site still lives on the message itself.
+  if (isMissingTable(error)) return;
+  if (error) throw error;
+}
+
+// ---------- Link history ----------
+
+const HISTORY_PAGE = 40;
+
+/** Titles for the viewer's rooms: the group name, or the other person's @ID for a direct chat. */
+export async function roomTitlesFor(viewerId: string, roomIds: string[]): Promise<Map<string, string>> {
+  const titles = new Map<string, string>();
+  if (roomIds.length === 0) return titles;
+  const { data: rooms, error } = await supabaseAdmin.from('chat_rooms').select('id, name, is_direct').in('id', roomIds);
+  if (error) throw error;
+  const directIds = (rooms ?? []).filter((room) => room.is_direct).map((room) => room.id);
+  const others = new Map<string, string>();
+  if (directIds.length) {
+    const { data: members, error: membersError } = await supabaseAdmin
+      .from('chat_room_members')
+      .select('room_id, user_id')
+      .in('room_id', directIds)
+      .neq('user_id', viewerId);
+    if (membersError) throw membersError;
+    for (const member of members ?? []) others.set(member.room_id, member.user_id);
+  }
+  const handles = await handlesFor([...others.values()]);
+  for (const room of rooms ?? []) {
+    const other = others.get(room.id);
+    titles.set(room.id, room.is_direct ? (other ? `@${handles.get(other) || fallbackHandle(other)}` : 'Just you') : room.name);
+  }
+  return titles;
+}
+
+/**
+ * Sites shared where the viewer can read them: the community room and the chat rooms they are in now.
+ * `place` is "all", "community" or a room id. Newest first, paged with `before`.
+ */
+export async function listLinkHistory(
+  viewerId: string,
+  options: { place: string; before: string | null; query: string }
+): Promise<{ items: LinkHistoryItem[]; hasMore: boolean; rooms: { id: string; title: string }[] }> {
+  const { data: memberships, error: membershipError } = await supabaseAdmin
+    .from('chat_room_members')
+    .select('room_id')
+    .eq('user_id', viewerId);
+  if (membershipError) throw membershipError;
+  const roomIds = (memberships ?? []).map((m) => m.room_id as string);
+  const titles = await roomTitlesFor(viewerId, roomIds);
+  const rooms = roomIds.map((id) => ({ id, title: titles.get(id) ?? 'Room' })).sort((a, b) => a.title.localeCompare(b.title));
+
+  if (options.place !== 'all' && options.place !== 'community' && !roomIds.includes(options.place)) {
+    return { items: [], hasMore: false, rooms };
+  }
+
+  let query = supabaseAdmin
+    .from('shared_links')
+    .select('id, url, title, memo, user_id, created_at, community_message_id, chat_message_id, room_id')
+    .order('created_at', { ascending: false })
+    .order('position', { ascending: true })
+    // A little extra so the sites of one message are never split across pages (see below).
+    .limit(HISTORY_PAGE + MAX_LINKS_PER_MESSAGE);
+  if (options.place === 'community') query = query.not('community_message_id', 'is', null);
+  else if (options.place !== 'all') query = query.eq('room_id', options.place);
+  else if (roomIds.length) query = query.or(`community_message_id.not.is.null,room_id.in.(${roomIds.join(',')})`);
+  else query = query.not('community_message_id', 'is', null);
+  if (options.before) query = query.lt('created_at', options.before);
+  // Characters with a meaning in the filter syntax are dropped from the search words.
+  const words = options.query.replace(/[%,()*\\"]/g, ' ').trim().slice(0, 100);
+  if (words) query = query.or(`title.ilike.%${words}%,url.ilike.%${words}%,memo.ilike.%${words}%`);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = data ?? [];
+  // Keep whole messages together: the page ends after the last site of the message it stops in.
+  let count = Math.min(rows.length, HISTORY_PAGE);
+  while (count < rows.length && rows[count].created_at === rows[count - 1]?.created_at) count++;
+  const page = rows.slice(0, count);
+
+  const communityIds = [...new Set(page.map((row) => row.community_message_id).filter(Boolean))] as string[];
+  const chatIds = [...new Set(page.map((row) => row.chat_message_id).filter(Boolean))] as string[];
+  const [handles, communityMessages, chatMessages] = await Promise.all([
+    handlesFor(page.map((row) => row.user_id)),
+    communityIds.length
+      ? supabaseAdmin.from('community_messages').select('id, collection_name').in('id', communityIds)
+      : Promise.resolve({ data: [], error: null }),
+    chatIds.length
+      ? supabaseAdmin.from('chat_messages').select('id, collection_name').in('id', chatIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (communityMessages.error) throw communityMessages.error;
+  if (chatMessages.error) throw chatMessages.error;
+  const collections = new Map<string, string | null>(
+    [...(communityMessages.data ?? []), ...(chatMessages.data ?? [])].map((m) => [m.id as string, m.collection_name as string | null])
+  );
+
+  const items: LinkHistoryItem[] = page.map((row) => {
+    const messageId = (row.community_message_id ?? row.chat_message_id) as string;
+    return {
+      id: row.id,
+      url: row.url,
+      title: row.title,
+      memo: row.memo,
+      sharedBy: (row.user_id && handles.get(row.user_id)) || fallbackHandle(row.user_id),
+      sharedAt: row.created_at,
+      messageId,
+      place: row.room_id
+        ? { kind: 'room', roomId: row.room_id, title: titles.get(row.room_id) ?? 'Room' }
+        : { kind: 'community' },
+      collectionName: collections.get(messageId) ?? null,
+    };
+  });
+  return { items, hasMore: rows.length > count, rooms };
 }
 
 // ---------- Reactions ----------
 
 export type ReactionTable = 'community_message_reactions' | 'chat_message_reactions';
 
-// Message ids go in the request address; keep each request well under URL length limits.
-const REACTION_ID_CHUNK = 100;
-
 /** Reactions for the given messages, grouped per message. Empty before the reactions migration runs. */
 export async function reactionsFor(table: ReactionTable, messageIds: string[], viewerId: string): Promise<Map<string, Reaction[]>> {
   const result = new Map<string, Reaction[]>();
   const rows: { message_id: string; user_id: string; emoji: string }[] = [];
-  for (let i = 0; i < messageIds.length; i += REACTION_ID_CHUNK) {
+  for (let i = 0; i < messageIds.length; i += ID_CHUNK) {
     const { data, error } = await supabaseAdmin
       .from(table)
       .select('message_id, user_id, emoji, created_at')
-      .in('message_id', messageIds.slice(i, i + REACTION_ID_CHUNK))
+      .in('message_id', messageIds.slice(i, i + ID_CHUNK))
       .order('created_at', { ascending: true });
     if (isMissingTable(error)) return result;
     if (error) throw error;
@@ -147,12 +393,6 @@ export async function reactionsFor(table: ReactionTable, messageIds: string[], v
     result.set(row.message_id, list);
   }
   return result;
-}
-
-/** Messages ready for the browser, with the viewer's view of their reactions. */
-export async function toChatMessagesWithReactions(table: ReactionTable, rows: MessageRow[], viewerId: string) {
-  const reactable = rows.filter((row) => (row.kind ?? 'user') === 'user').map((row) => row.id);
-  return toChatMessages(rows, await reactionsFor(table, reactable, viewerId));
 }
 
 /**
@@ -183,25 +423,6 @@ export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 /** "?ids=a,b,c" -> up to 200 valid message ids. */
 export function parseMessageIds(value: string | null) {
   return [...new Set((value ?? '').split(',').filter((id) => UUID_PATTERN.test(id)))].slice(0, 200);
-}
-
-/** Validates a message sent from the composer. */
-export function parseMessageInput(payload: {
-  body?: unknown;
-  linkUrl?: unknown;
-  linkTitle?: unknown;
-}): { body: string; linkUrl: string | null; linkTitle: string | null } | { error: string } {
-  const body = typeof payload.body === 'string' ? payload.body.trim() : '';
-  const hasLink = payload.linkUrl !== undefined && payload.linkUrl !== null && payload.linkUrl !== '';
-  const linkUrl = hasLink ? normalizeShareUrl(payload.linkUrl) : null;
-
-  if (hasLink && !linkUrl) return { error: 'Only http and https addresses can be shared' };
-  if (!body && !linkUrl) return { error: 'Write a message or attach a site' };
-  if (body.length > MESSAGE_MAX_LENGTH) return { error: `Messages can be up to ${MESSAGE_MAX_LENGTH} characters` };
-
-  const rawTitle = typeof payload.linkTitle === 'string' ? payload.linkTitle.trim() : '';
-  const linkTitle = linkUrl ? (rawTitle || hostnameOf(linkUrl)).slice(0, LINK_TITLE_MAX_LENGTH) : null;
-  return { body, linkUrl, linkTitle };
 }
 
 const MIN_GAP_MS = 1500;

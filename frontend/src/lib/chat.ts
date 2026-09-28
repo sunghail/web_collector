@@ -8,11 +8,33 @@ export interface ChatMessage {
   authorHandle: string;
   kind: 'user' | 'system';
   body: string;
-  linkUrl: string | null;
-  linkTitle: string | null;
+  /** Sites shared with the message, in order, each with the sharer's optional note. */
+  links: SharedLink[];
+  /** Set when a whole category was shared, so others can save it as a category. */
+  collectionName: string | null;
   createdAt: string;
   /** Emoji reactions, in the order each emoji was first used. Empty for system notes. */
   reactions: Reaction[];
+}
+
+export interface SharedLink {
+  url: string;
+  title: string;
+  memo: string | null;
+}
+
+/** One site in the Link history screen. */
+export interface LinkHistoryItem {
+  id: string;
+  url: string;
+  title: string;
+  memo: string | null;
+  sharedBy: string;
+  sharedAt: string;
+  messageId: string;
+  /** Where it was shared: the community room, or a chat room you are in. */
+  place: { kind: 'community' } | { kind: 'room'; roomId: string; title: string };
+  collectionName: string | null;
 }
 
 export interface Reaction {
@@ -73,6 +95,9 @@ export interface RoomDetail {
 
 export const MESSAGE_MAX_LENGTH = 1000;
 export const LINK_TITLE_MAX_LENGTH = 200;
+export const LINK_MEMO_MAX_LENGTH = 300;
+export const COLLECTION_NAME_MAX_LENGTH = 50;
+export const MAX_LINKS_PER_MESSAGE = 30;
 export const ROOM_NAME_MAX_LENGTH = 50;
 export const HANDLE_PATTERN = /^[a-z0-9_.]{3,20}$/;
 
@@ -100,4 +125,53 @@ export function hostnameOf(url: string) {
   } catch {
     return url;
   }
+}
+
+// Web addresses written in message text: "https://…", "http://…" or "www.…".
+export const ADDRESS_PATTERN = /(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/gi;
+// Punctuation right after an address usually ends the sentence, not the address.
+const TRAILING_PUNCTUATION = /[.,!?;:'")\]}]+$/;
+
+/** One address as written in text: the address itself, punctuation after it, and a safe link (or null). */
+export function readAddress(written: string) {
+  const trailing = written.match(TRAILING_PUNCTUATION)?.[0] ?? '';
+  const address = trailing ? written.slice(0, -trailing.length) : written;
+  const href = normalizeShareUrl(/^www\./i.test(address) ? `https://${address}` : address);
+  return { address, trailing, href };
+}
+
+/** The web addresses in a message, as safe links, each once and in order. */
+export function findAddresses(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.match(ADDRESS_PATTERN) ?? []) {
+    const { href } = readAddress(match);
+    if (href && !found.includes(href)) found.push(href);
+  }
+  return found;
+}
+
+/** True when the text is nothing but web addresses (and spaces), so it can be sent as site cards alone. */
+export function isOnlyAddresses(text: string) {
+  return text.trim().length > 0 && text.replace(ADDRESS_PATTERN, '').trim().length === 0 && findAddresses(text).length > 0;
+}
+
+/**
+ * What to send. Addresses written in the text also go along as site cards; text that is nothing but
+ * addresses is sent as the cards alone. Notes are trimmed, and a shared category stays a category
+ * only when nothing else was added to it.
+ */
+export function composeMessage(text: string, attached: SharedLink[], collectionName: string | null) {
+  const body = text.trim();
+  const known = new Set(attached.map((link) => link.url));
+  const fromText: SharedLink[] = findAddresses(body)
+    .filter((url) => !known.has(url))
+    .map((url) => ({ url, title: hostnameOf(url), memo: null }));
+  const links = [...attached, ...fromText]
+    .slice(0, MAX_LINKS_PER_MESSAGE)
+    .map((link) => ({ ...link, memo: link.memo?.trim() || null }));
+  return {
+    body: isOnlyAddresses(body) ? '' : body,
+    links,
+    collectionName: links.length > 0 && fromText.length === 0 ? collectionName : null,
+  };
 }

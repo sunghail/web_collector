@@ -24,6 +24,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   AppWindow,
   GripVertical,
+  History,
   Inbox,
   LayoutGrid,
   LogOut,
@@ -33,6 +34,7 @@ import {
   PanelLeftClose,
   Pencil,
   Plus,
+  Send,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -41,9 +43,10 @@ import { CategoryDialog, type CategoryFormValues } from './CategoryDialog';
 import { Category } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { INBOX_CATEGORY_ID } from '@/lib/linkUtils';
+import { useShareToChat } from '@/lib/shareToChat';
 import { toast } from 'sonner';
 
-export type SocialView = 'community' | 'chats' | 'friends';
+export type SocialView = 'community' | 'chats' | 'friends' | 'history';
 
 interface SidebarProps {
   categories: Category[];
@@ -128,11 +131,12 @@ interface SortableCategoryProps {
   count?: number;
   onSelect: () => void;
   onOpenWidget?: () => void;
+  onShare?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function SortableCategory({ category, isSelected, isCollapsed, count, onSelect, onOpenWidget, onEdit, onDelete }: SortableCategoryProps) {
+function SortableCategory({ category, isSelected, isCollapsed, count, onSelect, onOpenWidget, onShare, onEdit, onDelete }: SortableCategoryProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id });
 
   const style = {
@@ -183,6 +187,11 @@ function SortableCategory({ category, isSelected, isCollapsed, count, onSelect, 
             {onOpenWidget && (
               <button type="button" onClick={onOpenWidget} className={actionClass} aria-label={`Open ${category.name} as a widget`} title="Open as widget">
                 <AppWindow className="size-3.5" />
+              </button>
+            )}
+            {onShare && (
+              <button type="button" onClick={onShare} className={actionClass} aria-label={`Share ${category.name} to a chat`} title="Share to chat">
+                <Send className="size-3.5" />
               </button>
             )}
             <button type="button" onClick={onEdit} className={actionClass} aria-label={`Edit ${category.name}`} title="Edit">
@@ -358,6 +367,7 @@ export function Sidebar({
                 { view: 'chats' as const, label: 'Chats', icon: <MessageCircle className="size-4" />, badge: unreadMessages },
                 { view: 'friends' as const, label: 'Friends', icon: <Users className="size-4" />, badge: pendingRequests },
                 { view: 'community' as const, label: 'Community', icon: <MessagesSquare className="size-4" />, badge: 0 },
+                { view: 'history' as const, label: 'Link history', icon: <History className="size-4" />, badge: 0 },
               ]).map((item) => (
                 <NavItem
                   key={item.view}
@@ -408,6 +418,11 @@ export function Sidebar({
                       count={linkCounts ? linkCounts[category.id] ?? 0 : undefined}
                       onSelect={() => handleSelect(category.id)}
                       onOpenWidget={onOpenWidget ? () => onOpenWidget(category) : undefined}
+                      onShare={
+                        onOpenSocial && (linkCounts?.[category.id] ?? 0) > 0
+                          ? () => useShareToChat.getState().open({ kind: 'category', categoryId: category.id, name: category.name })
+                          : undefined
+                      }
                       onEdit={() =>
                         setEditing({
                           id: category.id,

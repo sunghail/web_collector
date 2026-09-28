@@ -1,6 +1,7 @@
 'use client';
 
 import type { KeyboardEvent, ReactNode } from 'react';
+import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -115,9 +116,11 @@ interface CardMenuProps {
   label: string;
   onEdit: () => void;
   onDelete: () => void;
+  /** Send the link to the community room or a chat. */
+  onShare?: () => void;
 }
 
-export function CardMenu({ label, onEdit, onDelete }: CardMenuProps) {
+export function CardMenu({ label, onEdit, onDelete, onShare }: CardMenuProps) {
   const { isTile } = useCardStyle();
 
   return (
@@ -139,7 +142,13 @@ export function CardMenu({ label, onEdit, onDelete }: CardMenuProps) {
           </svg>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
+      <DropdownMenuContent align="end" className="w-40">
+        {onShare && (
+          <DropdownMenuItem onClick={onShare} className="cursor-pointer">
+            <Send className="mr-2 size-4" />
+            Share to chat
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onClick={onEdit} className="cursor-pointer">
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />

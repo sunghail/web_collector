@@ -2,15 +2,27 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDown, BookmarkPlus, ExternalLink, Link2, SendHorizontal, X } from 'lucide-react';
+import { ArrowDown, Link2, SendHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
-import { MESSAGE_MAX_LENGTH, hostnameOf, type ChatMessage, type Reaction } from '@/lib/chat';
+import {
+  MAX_LINKS_PER_MESSAGE,
+  MESSAGE_MAX_LENGTH,
+  composeMessage,
+  hostnameOf,
+  normalizeShareUrl,
+  type ChatMessage,
+  type Reaction,
+  type SharedLink,
+} from '@/lib/chat';
 import { chatFontFamily, useChatPreferences } from '@/lib/chatPreferences';
-import { ShareSiteDialog, type SharedSite } from './ShareSiteDialog';
-import { SiteIcon } from './SiteIcon';
+import { ShareSiteDialog } from './ShareSiteDialog';
 import { MessageActions, ReactionChips } from './Reactions';
+import { SharedLinks } from './SharedLinks';
+import { AttachmentList } from './AttachmentList';
+import { MessageText } from './MessageText';
+import type { Category } from '@/types';
 
 const POLL_MS = 4000;
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -20,6 +32,8 @@ const WHEEL_STEP_DELTA = 40;
 // Reactions on messages already shown are refreshed every other poll, for the latest messages only.
 const REACTION_REFRESH_EVERY = 2;
 const REACTION_REFRESH_LIMIT = 100;
+// Going to a message from the Link history loads older pages until it shows up, up to this many.
+const FOCUS_PAGE_LIMIT = 20;
 
 function sameReactions(a: Reaction[], b: Reaction[]) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -54,6 +68,9 @@ export interface ChatThreadProps {
   onSeen?: () => void;
   /** Called when the server says this thread is no longer yours (removed from a room, room deleted). */
   onGone?: () => void;
+  /** A message to scroll to and highlight once loaded, e.g. when coming from the Link history. */
+  focusMessageId?: string | null;
+  onFocused?: () => void;
 }
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -83,31 +100,6 @@ function isGone(error: unknown) {
   return status === 403 || status === 404;
 }
 
-function SharedSiteCard({ message, canSave, onSave }: { message: ChatMessage; canSave: boolean; onSave: () => void }) {
-  if (!message.linkUrl) return null;
-  const iconButton =
-    'flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground';
-  return (
-    <div className="mt-1.5 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-2.5 pr-2 font-sans shadow-card">
-      <SiteIcon url={message.linkUrl} />
-      <a href={message.linkUrl} target="_blank" rel="noopener noreferrer nofollow" className="min-w-0 flex-1 outline-none focus-visible:underline">
-        <span className="block truncate text-[13px] font-semibold">{message.linkTitle || hostnameOf(message.linkUrl)}</span>
-        <span className="block truncate text-xs text-muted-foreground">{hostnameOf(message.linkUrl)}</span>
-      </a>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {canSave && (
-          <button type="button" onClick={onSave} title="Save to my links" aria-label="Save to my links" className={iconButton}>
-            <BookmarkPlus className="size-4" />
-          </button>
-        )}
-        <a href={message.linkUrl} target="_blank" rel="noopener noreferrer nofollow" title="Open" aria-label="Open site" className={iconButton}>
-          <ExternalLink className="size-4" />
-        </a>
-      </div>
-    </div>
-  );
-}
-
 export function ChatThread({
   endpoint,
   currentUserId,
@@ -119,6 +111,8 @@ export function ChatThread({
   onLinkSaved,
   onSeen,
   onGone,
+  focusMessageId,
+  onFocused,
 }: ChatThreadProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -126,7 +120,10 @@ export function ChatThread({
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [text, setText] = useState('');
-  const [attachment, setAttachment] = useState<SharedSite | null>(null);
+  const [attachments, setAttachments] = useState<SharedLink[]>([]);
+  // Set when a whole category is attached, so others can save it as a category.
+  const [collectionName, setCollectionName] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [hasUnseen, setHasUnseen] = useState(false);
@@ -144,8 +141,10 @@ export function ChatThread({
   // Messages whose reaction is on its way to the server; a refresh must not undo the click meanwhile.
   const reactionsInFlight = useRef(new Set<string>());
   const pollCount = useRef(0);
-  const callbacks = useRef({ onSeen, onGone });
-  callbacks.current = { onSeen, onGone };
+  const callbacks = useRef({ onSeen, onGone, onFocused });
+  callbacks.current = { onSeen, onGone, onFocused };
+  const focusTarget = useRef<string | null>(focusMessageId ?? null);
+  const focusPagesLoaded = useRef(0);
 
   const isNearBottom = () => {
     const el = scrollRef.current;
@@ -302,16 +301,33 @@ export function ChatThread({
     }
   };
 
+  /** Adds sites to the next message, skipping ones already attached. */
+  const attach = (sites: SharedLink[], collection: string | null = null) => {
+    if (collection) {
+      setAttachments(sites.slice(0, MAX_LINKS_PER_MESSAGE));
+      setCollectionName(collection);
+    } else {
+      setAttachments((current) => {
+        const known = new Set(current.map((site) => site.url));
+        return [...current, ...sites.filter((site) => !known.has(site.url))].slice(0, MAX_LINKS_PER_MESSAGE);
+      });
+      // Adding other sites makes it no longer just that one category.
+      setCollectionName(null);
+    }
+    textareaRef.current?.focus();
+  };
+
   const send = async () => {
     const body = text.trim();
-    if ((!body && !attachment) || isSending) return;
+    if ((!body && attachments.length === 0) || isSending) return;
     setIsSending(true);
     try {
-      const response = await api.post(endpoint, { body, linkUrl: attachment?.url, linkTitle: attachment?.title });
+      const response = await api.post(endpoint, composeMessage(body, attachments, collectionName));
       pendingScroll.current = { type: 'bottom' };
       mergeNewer([response.data.message], false);
       setText('');
-      setAttachment(null);
+      setAttachments([]);
+      setCollectionName(null);
       textareaRef.current?.focus();
       callbacks.current.onSeen?.();
     } catch (error) {
@@ -353,10 +369,9 @@ export function ChatThread({
     }
   };
 
-  const saveSite = async (message: ChatMessage) => {
-    if (!message.linkUrl) return;
+  const saveSite = async (site: SharedLink) => {
     try {
-      await api.post('/links', { title: message.linkTitle || hostnameOf(message.linkUrl), url: message.linkUrl, categoryId: null });
+      await api.post('/links', { title: site.title || hostnameOf(site.url), url: site.url, memo: site.memo, categoryId: null });
       toast.success('Saved to your Inbox');
       onLinkSaved();
     } catch (error) {
@@ -365,6 +380,64 @@ export function ChatThread({
       else toast.error('Could not save the site');
     }
   };
+
+  /** Saves a shared category: into your category of the same name, or a new one. */
+  const saveCollection = async (message: ChatMessage) => {
+    const name = message.collectionName;
+    if (!name) return;
+    const toastId = toast.loading(`Saving “${name}”…`);
+    try {
+      const existing: Category[] = (await api.get('/categories')).data.categories || [];
+      let category = existing.find((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase());
+      if (!category) category = (await api.post('/categories', { name, color: '#8e8e93' })).data.category as Category;
+      let saved = 0;
+      let already = 0;
+      for (const site of message.links) {
+        try {
+          await api.post('/links', { title: site.title, url: site.url, memo: site.memo, categoryId: category.id });
+          saved += 1;
+        } catch (error) {
+          if ((error as ApiError)?.response?.status === 409) already += 1;
+          else throw error;
+        }
+      }
+      toast.success(`Saved ${saved} ${saved === 1 ? 'site' : 'sites'} to “${category.name}”${already ? ` · ${already} already saved` : ''}`, { id: toastId });
+      onLinkSaved();
+    } catch {
+      toast.error('Could not save the category', { id: toastId });
+    }
+  };
+
+  // Coming from the Link history: find the message (loading older pages if needed), then show it.
+  useEffect(() => {
+    if (focusMessageId) {
+      focusTarget.current = focusMessageId;
+      focusPagesLoaded.current = 0;
+    }
+  }, [focusMessageId]);
+
+  useEffect(() => {
+    const target = focusTarget.current;
+    if (!target || isLoading || isLoadingEarlier) return;
+    if (messages.some((m) => m.id === target)) {
+      focusTarget.current = null;
+      requestAnimationFrame(() => {
+        document.getElementById(`message-${target}`)?.scrollIntoView({ block: 'center' });
+        setHighlightId(target);
+        window.setTimeout(() => setHighlightId((current) => (current === target ? null : current)), 2600);
+      });
+      callbacks.current.onFocused?.();
+    } else if (hasMore && focusPagesLoaded.current < FOCUS_PAGE_LIMIT) {
+      focusPagesLoaded.current += 1;
+      loadEarlier();
+    } else {
+      focusTarget.current = null;
+      toast.message('That message was deleted or is too old to show');
+      callbacks.current.onFocused?.();
+    }
+    // loadEarlier reads the latest messages itself; running again whenever the list changes is intended.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, isLoading, isLoadingEarlier, hasMore, focusMessageId]);
 
   // Grow the textarea with its content, up to a few lines.
   useEffect(() => {
@@ -375,7 +448,7 @@ export function ChatThread({
   }, [text, fontSize, font]);
 
   const remaining = MESSAGE_MAX_LENGTH - text.length;
-  const canSend = (text.trim().length > 0 || attachment !== null) && remaining >= 0 && !isSending && !needsSetup;
+  const canSend = (text.trim().length > 0 || attachments.length > 0) && remaining >= 0 && !isSending && !needsSetup;
 
   return (
     <div ref={rootRef} className="relative flex h-full min-h-0 flex-col">
@@ -447,9 +520,13 @@ export function ChatThread({
               const isMine = message.userId === currentUserId;
 
               return (
-                <div key={message.id}>
+                <div key={message.id} id={`message-${message.id}`} className="scroll-mt-24">
                   {dayDivider}
-                  <div className={`group relative flex gap-3 rounded-lg px-2 py-1 hover:bg-accent/50 ${continues ? '' : 'mt-3'}`}>
+                  <div
+                    className={`group relative flex gap-3 rounded-lg px-2 py-1 transition-colors duration-700 hover:bg-accent/50 ${continues ? '' : 'mt-3'} ${
+                      highlightId === message.id ? 'bg-primary/10 ring-2 ring-primary/40' : ''
+                    }`}
+                  >
                     <div className="w-8 shrink-0">
                       {!continues && (
                         <div
@@ -474,10 +551,16 @@ export function ChatThread({
                       )}
                       {message.body && (
                         <p className="whitespace-pre-wrap break-words leading-relaxed" style={textColor ? { color: textColor } : undefined}>
-                          {message.body}
+                          <MessageText text={message.body} />
                         </p>
                       )}
-                      <SharedSiteCard message={message} canSave={!isMine} onSave={() => saveSite(message)} />
+                      <SharedLinks
+                        links={message.links ?? []}
+                        collectionName={message.collectionName ?? null}
+                        canSave={!isMine}
+                        onSave={saveSite}
+                        onSaveAll={() => saveCollection(message)}
+                      />
                       <ReactionChips reactions={message.reactions ?? []} onToggle={(emoji) => toggleReaction(message, emoji)} />
                     </div>
                     <MessageActions
@@ -511,23 +594,15 @@ export function ChatThread({
 
       <div className="shrink-0 border-t border-border/80 bg-background/85 px-4 py-3 backdrop-blur-md md:px-8">
         <div className="mx-auto max-w-3xl">
-          {attachment && (
-            <div className="mb-2 flex max-w-md items-center gap-3 rounded-xl border border-border bg-card p-2 pr-1.5 shadow-card">
-              <SiteIcon url={attachment.url} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium">{attachment.title}</span>
-                <span className="block truncate text-xs text-muted-foreground">{hostnameOf(attachment.url)}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setAttachment(null)}
-                aria-label="Remove attached site"
-                className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          )}
+          <AttachmentList
+            links={attachments}
+            collectionName={collectionName}
+            onChange={(next) => {
+              setAttachments(next);
+              if (next.length === 0) setCollectionName(null);
+            }}
+            onClearCollection={() => setCollectionName(null)}
+          />
 
           <form
             onSubmit={(e) => {
@@ -540,8 +615,8 @@ export function ChatThread({
               type="button"
               onClick={() => setIsShareOpen(true)}
               disabled={needsSetup}
-              aria-label="Share a site"
-              title="Share a site"
+              aria-label="Share sites"
+              title="Share sites"
               className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
             >
               <Link2 className="size-[18px]" />
@@ -551,6 +626,15 @@ export function ChatThread({
               rows={1}
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onPaste={(e) => {
+                // Pasting just a web address attaches it as a site card instead of plain text.
+                const pasted = e.clipboardData.getData('text').trim();
+                if (!/^https?:\/\/\S+$/i.test(pasted)) return;
+                const url = normalizeShareUrl(pasted);
+                if (!url) return;
+                e.preventDefault();
+                attach([{ url, title: hostnameOf(url), memo: null }]);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
@@ -574,7 +658,7 @@ export function ChatThread({
         </div>
       </div>
 
-      <ShareSiteDialog open={isShareOpen} onOpenChange={setIsShareOpen} onPick={setAttachment} />
+      <ShareSiteDialog open={isShareOpen} onOpenChange={setIsShareOpen} onPick={attach} />
     </div>
   );
 }

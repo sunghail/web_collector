@@ -17,6 +17,9 @@ import { SearchField } from '@/components/layout/SearchField';
 import { CommunityRoom } from '@/components/community/CommunityRoom';
 import { ChatsView } from '@/components/social/ChatsView';
 import { FriendsView } from '@/components/social/FriendsView';
+import { LinkHistoryView } from '@/components/social/LinkHistoryView';
+import { ShareToChatDialog } from '@/components/chat/ShareToChatDialog';
+import type { ChatPlace } from '@/lib/shareToChat';
 import type { SocialView } from '@/components/layout/Sidebar';
 import { LinkGrid } from '@/components/links/LinkGrid';
 import { AddLinkDialog } from '@/components/links/AddLinkDialog';
@@ -34,6 +37,8 @@ export default function DashboardPage() {
   const { user, isAuthenticated, isLoading: authLoading, checkAuth } = useAuthStore();
   const [view, setView] = useState<'links' | SocialView>('links');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  // A chat message to scroll to after opening its chat (from the Link history).
+  const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [socialBadges, setSocialBadges] = useState({ unreadMessages: 0, pendingRequests: 0 });
 
   // Sidebar badges for unread chat messages and friend requests.
@@ -539,6 +544,23 @@ export default function DashboardPage() {
   const isInboxSelected = selectedCategoryId === INBOX_CATEGORY_ID;
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
 
+  /** Opens the community room or a chat room, optionally at a given message. */
+  const openChat = (place: ChatPlace, messageId: string | null = null) => {
+    setFocusMessageId(messageId);
+    if (place.kind === 'community') {
+      setView('community');
+    } else {
+      setActiveRoomId(place.roomId);
+      setView('chats');
+    }
+  };
+
+  // Saving from a chat can add links and, for a shared category, a category too.
+  const handleLinkSavedFromChat = () => {
+    fetchLinks();
+    fetchCategories();
+  };
+
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -573,7 +595,10 @@ export default function DashboardPage() {
         linkCounts={linkCounts}
         totalLinks={links.length}
         socialView={view === 'links' ? null : view}
-        onOpenSocial={(next) => setView(next)}
+        onOpenSocial={(next) => {
+          setFocusMessageId(null);
+          setView(next);
+        }}
         unreadMessages={socialBadges.unreadMessages}
         pendingRequests={socialBadges.pendingRequests}
         isCollapsed={isSidebarCollapsed}
@@ -585,9 +610,9 @@ export default function DashboardPage() {
           <CommunityRoom
             currentUserId={user.id}
             onOpenSidebar={() => setIsSidebarCollapsed(false)}
-            onLinkSaved={() => {
-              fetchLinks();
-            }}
+            onLinkSaved={handleLinkSavedFromChat}
+            focusMessageId={focusMessageId}
+            onFocused={() => setFocusMessageId(null)}
           />
         ) : view === 'chats' && user ? (
           <ChatsView
@@ -596,10 +621,16 @@ export default function DashboardPage() {
             onSelectRoom={setActiveRoomId}
             onOpenSidebar={() => setIsSidebarCollapsed(false)}
             onOpenFriends={() => setView('friends')}
-            onLinkSaved={() => {
-              fetchLinks();
-            }}
+            onLinkSaved={handleLinkSavedFromChat}
             onChanged={refreshSocialBadges}
+            focusMessageId={focusMessageId}
+            onFocused={() => setFocusMessageId(null)}
+          />
+        ) : view === 'history' && user ? (
+          <LinkHistoryView
+            onOpenSidebar={() => setIsSidebarCollapsed(false)}
+            onGoToMessage={openChat}
+            onLinkSaved={handleLinkSavedFromChat}
           />
         ) : view === 'friends' && user ? (
           <FriendsView
@@ -756,6 +787,8 @@ export default function DashboardPage() {
         className="hidden"
         onChange={handleImportBookmarks}
       />
+
+      <ShareToChatDialog onOpenPlace={(place) => openChat(place)} />
 
       {/* Add/Edit Link Dialog */}
       <AddLinkDialog

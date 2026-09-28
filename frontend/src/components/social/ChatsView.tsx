@@ -19,6 +19,9 @@ interface ChatsViewProps {
   onLinkSaved: () => void;
   /** Called when unread counts may have changed, so the sidebar badge can update. */
   onChanged: () => void;
+  /** A message in the open room to scroll to, e.g. when coming from the Link history. */
+  focusMessageId?: string | null;
+  onFocused?: () => void;
 }
 
 const LIST_POLL_MS = 8000;
@@ -105,7 +108,17 @@ function RoomList({
   );
 }
 
-export function ChatsView({ currentUserId, roomId, onSelectRoom, onOpenSidebar, onOpenFriends, onLinkSaved, onChanged }: ChatsViewProps) {
+export function ChatsView({
+  currentUserId,
+  roomId,
+  onSelectRoom,
+  onOpenSidebar,
+  onOpenFriends,
+  onLinkSaved,
+  onChanged,
+  focusMessageId,
+  onFocused,
+}: ChatsViewProps) {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -271,6 +284,8 @@ export function ChatsView({ currentUserId, roomId, onSelectRoom, onOpenSidebar, 
             emptyState={{ title: 'Start the conversation', body: 'Say hi, or share a site with the link button next to the message box.' }}
             setupHint="Run supabase/20260927_add_friends_and_chat_rooms.sql in the Supabase SQL editor, then reload."
             onLinkSaved={onLinkSaved}
+            focusMessageId={focusMessageId}
+            onFocused={onFocused}
             onSeen={markRead}
             onGone={() => {
               toast.message('You are no longer in this room');
