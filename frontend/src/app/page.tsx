@@ -9,6 +9,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useAuthStore } from '@/store/authStore';
 import { getFallbackFaviconDataUrl } from '@/lib/fallbackFavicons';
 import { DownloadSection } from '@/components/download/DownloadSection';
+import { LegalFooter } from '@/components/legal/LegalPage';
 
 const previewSections = [
   {
@@ -177,9 +178,7 @@ export default function HomePage() {
         </div>
       </main>
 
-      <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
-        Web Collector
-      </footer>
+      <LegalFooter />
     </div>
   );
 }
