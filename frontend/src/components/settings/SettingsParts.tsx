@@ -30,6 +30,23 @@ export function Group({
   );
 }
 
+/**
+ * Settings on the left, a live preview on the right that stays in view while the settings scroll.
+ * On narrow screens it is pinned above the settings instead, covering them as they scroll under it
+ * (the negative margins stretch its background over the panel's padding).
+ */
+export function WithPreview({ preview, children }: { preview: ReactNode; children: ReactNode }) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6">
+      <aside className="sticky -top-5 z-10 -mx-6 -mt-5 space-y-2 border-b border-border bg-popover px-6 pb-3 pt-5 lg:top-0 lg:col-start-2 lg:row-start-1 lg:m-0 lg:self-start lg:border-0 lg:p-0">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Preview</span>
+        {preview}
+      </aside>
+      <div className="space-y-4 lg:col-start-1 lg:row-start-1">{children}</div>
+    </div>
+  );
+}
+
 export function ChoiceButton({
   isSelected,
   onClick,

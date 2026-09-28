@@ -33,7 +33,7 @@ export function OptionsDialog({ triggerClassName }: { triggerClassName?: string 
           <Settings className="size-4" />
         </button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[540px]">
+      <DialogContent className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[540px] lg:max-w-[900px]">
         <DialogHeader className="space-y-3 border-b border-border px-6 pb-4 pt-6">
           <div>
             <DialogTitle>Settings</DialogTitle>
@@ -72,7 +72,11 @@ export function OptionsDialog({ triggerClassName }: { triggerClassName?: string 
         >
           {tab === 'style' && <WebStyleSettings />}
           {tab === 'cards' && <LinkCardSettings />}
-          {tab === 'app' && <AppSettings />}
+          {tab === 'app' && (
+            <div className="max-w-[492px]">
+              <AppSettings />
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

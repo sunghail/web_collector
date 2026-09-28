@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CardStylePreview } from '@/components/layout/CardStylePreview';
-import { ChoiceButton, Group } from './SettingsParts';
+import { ChoiceButton, Group, WithPreview } from './SettingsParts';
 import {
   CARD_HEIGHT_RANGE,
   CARD_PREFERENCE_DEFAULTS,
@@ -39,15 +39,17 @@ export function LinkCardSettings() {
     tileHeight === CARD_PREFERENCE_DEFAULTS.tileHeight;
 
   return (
-    <div className="space-y-4">
-      <CardStylePreview
-        layout={layout}
-        height={cardHeight}
-        effect={effectInPreview}
-        replayKey={`${layout}-${cardHeight}-${effectInPreview}`}
-        hold={previewedEffect !== null}
-      />
-
+    <WithPreview
+      preview={
+        <CardStylePreview
+          layout={layout}
+          height={cardHeight}
+          effect={effectInPreview}
+          replayKey={`${layout}-${cardHeight}-${effectInPreview}`}
+          hold={previewedEffect !== null}
+        />
+      }
+    >
       <Group label="Shape">
         <div className="grid grid-cols-2 gap-2">
           {cardLayouts.map((option) => (
@@ -104,6 +106,6 @@ export function LinkCardSettings() {
           </Button>
         </div>
       )}
-    </div>
+    </WithPreview>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { Check, Monitor, Moon, Plus, RotateCcw, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ColorField, Group, Segmented } from './SettingsParts';
+import { ColorField, Group, Segmented, WithPreview } from './SettingsParts';
 import {
   ACCENTS,
   CORNER_RANGE,
@@ -63,7 +63,7 @@ function Thumbnail({ palette, radius, isSelected }: { palette: StylePalette; rad
 function StylePreview() {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-background" aria-hidden="true">
-      <div className="flex h-36">
+      <div className="flex h-36 lg:h-48">
         <div className="w-24 shrink-0 space-y-1 border-r border-sidebar-border bg-sidebar p-2">
           <div className="rounded-md bg-card px-2 py-1 text-[10px] font-medium text-foreground shadow-card ring-1 ring-border/70">All links</div>
           <div className="px-2 py-1 text-[10px] text-muted-foreground">Inbox</div>
@@ -77,8 +77,8 @@ function StylePreview() {
             <span className="text-[11px] font-semibold text-foreground">All links</span>
             <span className="rounded-md bg-primary px-2 py-0.5 text-[9px] font-medium text-primary-foreground">Add</span>
           </div>
-          {['Team docs', 'Newsletter'].map((title) => (
-            <div key={title} className="flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-2 shadow-card">
+          {['Team docs', 'Newsletter', 'Design files'].map((title, index) => (
+            <div key={title} className={`${index === 2 ? 'hidden lg:flex' : 'flex'} h-9 items-center gap-2 rounded-xl border border-border bg-card px-2 shadow-card`}>
               <span className="size-5 rounded-md bg-primary/80" />
               <span className="min-w-0">
                 <span className="block truncate text-[10px] font-semibold text-card-foreground">{title}</span>
@@ -153,8 +153,7 @@ export function WebStyleSettings() {
   };
 
   return (
-    <div className="space-y-4">
-      <StylePreview />
+    <WithPreview preview={<StylePreview />}>
 
       <Group label="Mode">
         <Segmented label="Color mode" value={(theme ?? 'system') as 'light' | 'dark' | 'system'} options={modes} onChange={setTheme} />
@@ -325,6 +324,6 @@ export function WebStyleSettings() {
           )}
         </div>
       </Group>
-    </div>
+    </WithPreview>
   );
 }
