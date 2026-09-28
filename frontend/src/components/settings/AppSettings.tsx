@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, RefreshCw, RotateCcw } from 'lucide-react';
+import { Download, Laptop, Monitor, RefreshCw, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Group } from './SettingsParts';
 
@@ -34,9 +34,11 @@ function getUpdateRows(updateStatus: UpdateStatusPayload) {
 export function AppSettings() {
   const [appVersion, setAppVersion] = useState('');
   const [updateStatus, setUpdateStatus] = useState<UpdateStatusPayload>(idleUpdateStatus);
+  const [isDesktopApp, setIsDesktopApp] = useState(false);
 
   useEffect(() => {
     const electronAPI = window.electronAPI;
+    setIsDesktopApp(Boolean(electronAPI));
     electronAPI?.getAppVersion?.()
       .then((version) => {
         setAppVersion(version);
@@ -104,6 +106,29 @@ export function AppSettings() {
 
   return (
     <div className="space-y-4">
+      {!isDesktopApp && (
+        <Group label="Desktop app">
+          <p className="text-[13px] text-muted-foreground">
+            Tray icon, floating category widgets and automatic updates. Same account as this website.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button asChild variant="outline" className="gap-2">
+              <a href="/api/download/windows">
+                <Monitor className="size-4" />
+                Windows
+              </a>
+            </Button>
+            <Button asChild variant="outline" className="gap-2">
+              <a href="/api/download/mac">
+                <Laptop className="size-4" />
+                Mac
+              </a>
+            </Button>
+          </div>
+        </Group>
+      )}
+
+      {isDesktopApp && (
       <Group label="Updates">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -137,6 +162,7 @@ export function AppSettings() {
           </div>
         )}
       </Group>
+      )}
 
       <Group label="Keyboard">
         <div className="flex items-center justify-between text-[13px]">

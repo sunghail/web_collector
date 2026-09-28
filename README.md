@@ -55,7 +55,7 @@
 | 드래그 앤 드롭 | dnd-kit |
 | 데이터베이스 | Supabase (PostgreSQL) — 앱 서버(Next.js API)가 service role 키로 접근 |
 | 인증 | 자체 JWT + httpOnly 쿠키, Google 로그인(Supabase Auth) |
-| 데스크톱 앱 | Electron, electron-builder, 자동 업데이트 |
+| 데스크톱 앱 | Electron (배포된 웹사이트를 여는 방식), electron-builder, GitHub Releases 자동 업데이트 |
 
 ## 폴더 구조
 
@@ -104,13 +104,15 @@ npm install
 `.env.local`은 `.gitignore`에 들어 있어 저장소에 올라가지 않습니다.
 
 ### 4. DB 설정
-Supabase 대시보드 → **SQL Editor**에서 `supabase/` 폴더의 SQL을 **날짜순으로** 실행합니다.
+Supabase 대시보드 → **SQL Editor**에서 실행합니다.
 
-1. `20260427_add_category_default_favicon_id.sql` — 카테고리 기본 아이콘
-2. `20260923_add_community_messages.sql` — 커뮤니티
-3. `20260927_add_friends_and_chat_rooms.sql` — 공개 ID, 친구, 톡방
+- **새 프로젝트**: `supabase/00_setup_new_project.sql` **하나만** 실행하면 필요한 표 10개가 모두 만들어집니다.
+- **이미 쓰던 DB**: 날짜가 붙은 파일을 날짜순으로 실행합니다.
+  1. `20260427_add_category_default_favicon_id.sql` — 카테고리 기본 아이콘
+  2. `20260923_add_community_messages.sql` — 커뮤니티
+  3. `20260927_add_friends_and_chat_rooms.sql` — 공개 ID, 친구, 톡방
 
-각 SQL은 새 테이블·컬럼만 추가하며, 새 테이블은 앱 서버에서만 접근하도록 RLS로 잠가 둡니다.
+모든 표는 RLS로 잠가 두어 공개 키로는 접근할 수 없고, 앱 서버(관리자 키)로만 읽고 씁니다.
 
 ### 5. 실행
 
@@ -121,11 +123,39 @@ npm run dev            # http://localhost:30101
 
 포트를 바꾸려면 `npm run dev -- -p 30102`처럼 실행합니다.
 
-### 데스크톱 앱
+---
 
+## 배포
+
+### 웹사이트 (Vercel)
+1. Vercel에서 이 저장소를 가져오고 **Root Directory를 `frontend`**로 지정합니다.
+2. 환경 변수 4개(`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`)를 넣습니다.
+3. 이후 `main`에 올릴 때마다 자동으로 배포됩니다.
+4. Google 로그인을 쓰면 Supabase → Authentication → URL Configuration의 Redirect URLs에 `https://<Vercel 주소>/auth/callback`을 추가합니다.
+
+### 데스크톱 앱 (Windows / Mac)
+데스크톱 앱은 **배포된 웹사이트를 창으로 여는 방식**입니다. 설치 파일에는 비밀 키가 들어가지 않고, 웹을 고치면 앱 화면도 바로 최신이 됩니다.
+
+처음 한 번만: GitHub 저장소 → Settings → Secrets and variables → Actions → **Variables**에
+`WEB_COLLECTOR_APP_URL` = `https://<Vercel 주소>` 를 추가합니다. (비밀값이 아니며, 다른 토큰은 필요 없습니다)
+
+새 버전 내기:
 ```bash
-npm run electron:dev     # 개발 모드로 앱 실행
-npm run electron:build   # Windows 설치 파일 만들기
+# 1) frontend/package.json 의 "version" 을 올리고 커밋
+# 2) 같은 번호로 태그를 올리면 GitHub가 Windows·Mac 설치 파일을 만들어 Releases에 게시합니다
+git tag v1.0.28
+git push origin v1.0.28
+```
+
+- **Windows**: 설치된 앱이 켤 때와 6시간마다 새 버전을 확인해 뒤에서 받아 두고, "다시 시작" 알림을 띄웁니다.
+- **Mac**: Apple 서명이 없어 macOS가 자동 설치를 막기 때문에, 새 버전을 알리고 다운로드 페이지를 엽니다.
+- 홈페이지의 **Download** 버튼(`/api/download/windows`, `/api/download/mac`)은 항상 최신 릴리스를 가리킵니다.
+- 서명이 없어 처음 설치할 때 Windows·Mac 모두 보안 경고가 뜹니다. 해결 방법은 홈페이지 다운로드 영역에 안내되어 있습니다.
+
+로컬에서 확인할 때:
+```bash
+npm run electron:dev                                              # 개발 서버 + 앱 함께 실행
+WEB_COLLECTOR_APP_URL=https://<주소> npm run electron:build       # Windows 설치 파일 만들기
 ```
 
 ---
@@ -140,6 +170,7 @@ npm run electron:build   # Windows 설치 파일 만들기
 자세한 내용은 [V4_CHANGES.md](V4_CHANGES.md)를 보세요.
 
 ## 알려진 한계
+- 설치 파일에 코드 서명이 없어 처음 설치할 때 보안 경고가 뜹니다. Mac은 자동 업데이트 대신 새 버전 알림만 됩니다.
 - 새 메시지는 몇 초마다 확인하는 방식입니다 (실시간 푸시 아님).
 - 차단 기능은 아직 없습니다. 친구가 아닌 사람은 톡방에 넣을 수 없습니다.
 - 커뮤니티에서 다른 사람이 지운 메시지는 새로고침 전까지 화면에 남을 수 있습니다.

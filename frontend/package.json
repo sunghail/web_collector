@@ -10,13 +10,13 @@
     "lint": "eslint",
     "electron:build-ts": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run electron:build-ts && concurrently --kill-others \"npm run dev\" \"wait-on http://localhost:30101 && cross-env ELECTRON_DEV_URL=http://localhost:30101 electron .\"",
-    "electron:prebuild": "cross-env BUILD_TARGET=electron npm run build && node scripts/prepare-standalone.js && npm run electron:build-ts",
+    "electron:prebuild": "npm run electron:build-ts && npm run electron:config",
     "electron:prepare-mac-icon": "node scripts/prepare-mac-icon.js",
-    "electron:start": "cross-env IS_ELECTRON=true electron .",
     "electron:build": "npm run electron:prebuild && electron-builder --win --config electron-builder.yml",
-    "electron:build:mac": "npm run electron:prepare-mac-icon && npm run electron:prebuild && electron-builder --mac --x64 --arm64 --config electron-builder.yml",
-    "electron:publish": "npm run electron:prebuild && electron-builder --win --config electron-builder.yml --publish always && node scripts/publish-release.js",
-    "electron:publish:mac": "npm run electron:prepare-mac-icon && npm run electron:prebuild && electron-builder --mac --x64 --arm64 --config electron-builder.yml --publish always && node scripts/publish-release.js"
+    "electron:build:mac": "npm run electron:prepare-mac-icon && npm run electron:prebuild && electron-builder --mac --config electron-builder.yml",
+    "electron:publish": "npm run electron:prebuild && electron-builder --win --config electron-builder.yml --publish always",
+    "electron:publish:mac": "npm run electron:prepare-mac-icon && npm run electron:prebuild && electron-builder --mac --config electron-builder.yml --publish always",
+    "electron:config": "node scripts/write-app-config.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,8 +1,8 @@
-import { app, BrowserWindow, shell, ipcMain, Menu, screen } from 'electron';
+import { app, BrowserWindow, dialog, shell, ipcMain, Menu, screen, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
-import { startNextServer, stopNextServer } from './next-server';
+import { getAppUrl, isSignInPage } from './app-config';
 import { createTray, destroyTray } from './tray';
 
 interface WidgetCategoryData {
@@ -55,8 +55,17 @@ interface UpdateStatusPayload {
 
 let mainWindow: BrowserWindow | null = null;
 let appBaseUrl: string | null = null;
-let nextServerPort: number | null = null;
 const widgetStates = new Map<number, WidgetState>();
+const UPDATE_CHECK_DELAY_MS = 15_000;
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// macOS will not install updates for an unsigned app, so there we point people to the download page instead.
+const canSelfInstallUpdates = process.platform !== 'darwin';
+const promptedUpdateVersions = new Set<string>();
+// Local files a widget link may open. Programs and scripts are refused.
+const BLOCKED_OPEN_EXTENSIONS = new Set([
+  '.exe', '.msi', '.bat', '.cmd', '.com', '.scr', '.ps1', '.vbs', '.vbe', '.js', '.jse', '.wsf', '.wsh',
+  '.hta', '.lnk', '.reg', '.jar', '.app', '.pkg', '.command', '.sh', '.dmg',
+]);
 
 const isDev = !app.isPackaged;
 const useSingleInstanceLock = app.isPackaged;
@@ -104,9 +113,59 @@ function makeUpdatePayload(
   };
 }
 
+function getDownloadPageUrl() {
+  return `${getAppUrl()}/#download`;
+}
+
+/** On macOS: tell people once per version that a new release exists, and offer the download page. */
+async function promptMacDownload(version: string) {
+  if (promptedUpdateVersions.has(version)) return;
+  promptedUpdateVersions.add(version);
+  const { response } = await dialog.showMessageBox({
+    type: 'info',
+    buttons: ['Open download page', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Update available',
+    message: `Web Collector ${version} is available.`,
+    detail: 'Download the new version and replace the app in your Applications folder.',
+  });
+  if (response === 0) await shell.openExternal(getDownloadPageUrl());
+}
+
+/** On Windows: the update is already downloaded; offer to restart now. */
+async function promptRestartToUpdate(version: string) {
+  if (promptedUpdateVersions.has(version)) return;
+  promptedUpdateVersions.add(version);
+  const { response } = await dialog.showMessageBox({
+    type: 'info',
+    buttons: ['Restart now', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Update ready',
+    message: `Web Collector ${version} is ready to install.`,
+    detail: 'Restart now, or it will install the next time you quit the app.',
+  });
+  if (response === 0) {
+    isQuitting = true;
+    autoUpdater.quitAndInstall(true, true);
+  }
+}
+
+/** Quietly checks for a new release at startup and every few hours. */
+function scheduleAutomaticUpdateChecks() {
+  if (!app.isPackaged) return;
+  const check = () => {
+    autoUpdater.checkForUpdates().catch((error) => console.warn('[update] check failed', getErrorMessage(error)));
+  };
+  setTimeout(check, UPDATE_CHECK_DELAY_MS);
+  setInterval(check, UPDATE_CHECK_INTERVAL_MS);
+}
+
 function configureAutoUpdater() {
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Windows downloads in the background and installs on restart; macOS only announces the release.
+  autoUpdater.autoDownload = canSelfInstallUpdates;
+  autoUpdater.autoInstallOnAppQuit = canSelfInstallUpdates;
 
   autoUpdater.on('checking-for-update', () => {
     sendUpdateStatus(makeUpdatePayload('checking', 'Checking for updates.'));
@@ -116,10 +175,15 @@ function configureAutoUpdater() {
     updateDownloaded = false;
     updateDownloadedVersion = info.version;
     sendUpdateStatus(
-      makeUpdatePayload('available', `Version ${info.version} is available.`, {
-        version: info.version,
-      })
+      makeUpdatePayload(
+        'available',
+        canSelfInstallUpdates
+          ? `Version ${info.version} is available.`
+          : `Version ${info.version} is available. Download it from the website.`,
+        { version: info.version }
+      )
     );
+    if (!canSelfInstallUpdates) promptMacDownload(info.version);
   });
 
   autoUpdater.on('update-not-available', (info) => {
@@ -149,6 +213,7 @@ function configureAutoUpdater() {
         percent: 100,
       })
     );
+    promptRestartToUpdate(info.version);
   });
 
   autoUpdater.on('error', (error) => {
@@ -188,6 +253,13 @@ async function downloadAppUpdate(): Promise<UpdateStatusPayload> {
     return makeUpdatePayload('unsupported', 'Updates are available only in the installed desktop app.');
   }
 
+  if (!canSelfInstallUpdates) {
+    await shell.openExternal(getDownloadPageUrl());
+    return makeUpdatePayload('available', 'Opened the download page in your browser.', {
+      version: updateDownloadedVersion,
+    });
+  }
+
   try {
     await autoUpdater.downloadUpdate();
     return makeUpdatePayload(
@@ -216,6 +288,7 @@ function installAppUpdate(): UpdateStatusPayload {
     });
   }
 
+  isQuitting = true;
   autoUpdater.quitAndInstall(true, true);
   return makeUpdatePayload('downloaded', 'Restarting to install the update.', {
     version: updateDownloadedVersion,
@@ -231,6 +304,27 @@ function normalizeOpenPath(targetPath: string) {
   return targetPath;
 }
 
+function ensureAppBaseUrl() {
+  if (!appBaseUrl) appBaseUrl = getAppUrl();
+  return appBaseUrl;
+}
+
+function isAppUrl(rawUrl: string) {
+  try {
+    return new URL(rawUrl).origin === new URL(ensureAppBaseUrl()).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** IPC requests are only accepted from our own site, never from other pages a window might show. */
+function isTrustedSender(event: IpcMainEvent | IpcMainInvokeEvent) {
+  const senderUrl = event.senderFrame?.url;
+  const trusted = Boolean(senderUrl && isAppUrl(senderUrl));
+  if (!trusted) console.warn('[ipc] ignored a request from', senderUrl);
+  return trusted;
+}
+
 function configureExternalLinkHandling(window: BrowserWindow) {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalUrl(url)) {
@@ -238,30 +332,43 @@ function configureExternalLinkHandling(window: BrowserWindow) {
     }
     return { action: 'deny' };
   });
+
+  // The window stays on our site (and the Google sign-in pages); other sites open in the browser.
+  window.webContents.on('will-navigate', (event, url) => {
+    if (isAppUrl(url)) return;
+    try {
+      if (isSignInPage(new URL(url))) return;
+    } catch {
+      // Not a web address; handled below.
+    }
+    event.preventDefault();
+    if (isExternalUrl(url)) shell.openExternal(url);
+  });
 }
 
-async function ensureAppBaseUrl() {
-  if (appBaseUrl) {
-    return appBaseUrl;
-  }
-
-  if (isDev) {
-    appBaseUrl = process.env.ELECTRON_DEV_URL || 'http://localhost:30101';
-    return appBaseUrl;
-  }
-
-  if (nextServerPort === null) {
-    nextServerPort = await startNextServer();
-  }
-
-  appBaseUrl = `http://localhost:${nextServerPort}`;
-  return appBaseUrl;
+function offlinePage() {
+  const retryUrl = ensureAppBaseUrl();
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Web Collector</title>
+<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;background:#f6f6f4;color:#1a1a19}
+@media (prefers-color-scheme:dark){body{background:#111112;color:#ededec}}
+div{text-align:center;max-width:360px;padding:24px}h1{font-size:18px;margin:0 0 8px}p{font-size:14px;opacity:.7;margin:0 0 20px}
+a{display:inline-block;padding:10px 18px;border-radius:10px;background:#2563eb;color:#fff;text-decoration:none;font-size:14px}</style></head>
+<body><div><h1>Can't reach Web Collector</h1><p>Check your internet connection, then try again.</p><a href="${retryUrl}">Try again</a></div></body></html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 async function loadRoute(window: BrowserWindow, route: string) {
-  const baseUrl = await ensureAppBaseUrl();
+  const baseUrl = ensureAppBaseUrl();
   const targetUrl = new URL(route.startsWith('/') ? route : `/${route}`, `${baseUrl}/`);
-  await window.loadURL(targetUrl.toString());
+  try {
+    await window.loadURL(targetUrl.toString());
+  } catch (error) {
+    const message = getErrorMessage(error);
+    // ERR_ABORTED only means the page moved on to another address; that is fine.
+    if (message.includes('ERR_ABORTED')) return;
+    console.error('[load] failed to open', targetUrl.toString(), message);
+    if (!window.isDestroyed()) await window.loadURL(offlinePage());
+  }
 }
 
 function getWidgetPosition() {
@@ -648,6 +755,7 @@ if (!gotTheLock) {
     if (app.isPackaged) {
       await restoreWidgetWindows();
     }
+    scheduleAutomaticUpdateChecks();
   });
 }
 
@@ -690,10 +798,11 @@ async function createWindow() {
 
   configureExternalLinkHandling(mainWindow);
 
-  // IPC: open multiple URLs in default browser
-  ipcMain.handle('open-urls', async (_event, urls: string[]) => {
-    for (const url of urls) {
-      if (isExternalUrl(url)) {
+  // IPC: every request is checked to come from our own site (isTrustedSender).
+  ipcMain.handle('open-urls', async (event, urls: string[]) => {
+    if (!isTrustedSender(event) || !Array.isArray(urls)) return;
+    for (const url of urls.slice(0, 50)) {
+      if (typeof url === 'string' && isExternalUrl(url)) {
         await shell.openExternal(url);
       }
     }
@@ -701,39 +810,57 @@ async function createWindow() {
 
   ipcMain.handle('app:get-version', () => app.getVersion());
 
-  ipcMain.handle('app:check-for-updates', async () => checkForAppUpdates());
+  ipcMain.handle('app:check-for-updates', async (event) =>
+    isTrustedSender(event) ? checkForAppUpdates() : makeUpdatePayload('error', 'Not allowed.')
+  );
 
-  ipcMain.handle('app:download-update', async () => downloadAppUpdate());
+  ipcMain.handle('app:download-update', async (event) =>
+    isTrustedSender(event) ? downloadAppUpdate() : makeUpdatePayload('error', 'Not allowed.')
+  );
 
-  ipcMain.handle('app:install-update', () => installAppUpdate());
+  ipcMain.handle('app:install-update', (event) =>
+    isTrustedSender(event) ? installAppUpdate() : makeUpdatePayload('error', 'Not allowed.')
+  );
 
-  ipcMain.handle('open-widget', async (_event, category: WidgetCategoryData) => {
+  ipcMain.handle('open-widget', async (event, category: WidgetCategoryData) => {
+    if (!isTrustedSender(event)) return;
     await openWidget(category);
   });
 
-  ipcMain.on('open-path', async (_event, targetPath: string) => {
-    if (!targetPath) {
+  // Widget links may point at local folders or documents. Programs and scripts are never opened.
+  ipcMain.on('open-path', async (event, targetPath: string) => {
+    if (!isTrustedSender(event) || typeof targetPath !== 'string' || !targetPath) {
       return;
     }
 
-    await shell.openPath(normalizeOpenPath(targetPath));
+    const resolved = normalizeOpenPath(targetPath);
+    if (BLOCKED_OPEN_EXTENSIONS.has(path.extname(resolved).toLowerCase())) {
+      console.warn('[open-path] refused to open a program or script', resolved);
+      return;
+    }
+
+    await shell.openPath(resolved);
   });
 
-  ipcMain.on('widget:toggle', () => {
+  ipcMain.on('widget:toggle', (event) => {
+    if (!isTrustedSender(event)) return;
     toggleWidgetWindows();
   });
 
   ipcMain.on('widget:close-self', (event) => {
+    if (!isTrustedSender(event)) return;
     const widgetWindow = BrowserWindow.fromWebContents(event.sender);
     closeWidgetWindow(widgetWindow);
   });
 
   ipcMain.on('widget:remove-category', (event, categoryId: string) => {
+    if (!isTrustedSender(event)) return;
     const widgetWindow = BrowserWindow.fromWebContents(event.sender);
     removeCategoryFromWidget(widgetWindow, categoryId);
   });
 
   ipcMain.on('widget:detach-category', async (event, category: WidgetCategoryData) => {
+    if (!isTrustedSender(event)) return;
     const sourceWindow = BrowserWindow.fromWebContents(event.sender);
     removeCategoryFromWidget(sourceWindow, category.categoryId);
     await openWidget(category);
@@ -744,35 +871,9 @@ async function createWindow() {
     createTray(mainWindow);
   }
 
-  // Load the app
-  if (isDev) {
-    // Development: connect to Next.js dev server
-    const devUrl = await ensureAppBaseUrl();
-    console.log(`Loading dev URL: ${devUrl}`);
-
-    try {
-      await loadRoute(mainWindow, '/');
-    } catch (err) {
-      console.error('Failed to load dev URL. Is Next.js dev server running?', err);
-      // Retry after a short delay
-      setTimeout(async () => {
-        try {
-          if (mainWindow) {
-            await loadRoute(mainWindow, '/');
-          }
-        } catch (retryErr) {
-          console.error('Retry failed:', retryErr);
-        }
-      }, 3000);
-    }
-  } else {
-    // Production: start embedded Next.js server
-    try {
-      await loadRoute(mainWindow, '/');
-    } catch (err) {
-      console.error('Failed to start Next.js server:', err);
-    }
-  }
+  // Load the web app: the Vercel site in installed builds, the local dev server while developing.
+  console.log(`Loading ${ensureAppBaseUrl()}`);
+  await loadRoute(mainWindow, '/');
 }
 
 app.on('window-all-closed', () => {
@@ -785,7 +886,6 @@ app.on('before-quit', () => {
   if (app.isPackaged) {
     destroyTray();
   }
-  stopNextServer();
 });
 
 app.on('activate', () => {

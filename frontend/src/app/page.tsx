@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useAuthStore } from '@/store/authStore';
 import { getFallbackFaviconDataUrl } from '@/lib/fallbackFavicons';
+import { DownloadSection } from '@/components/download/DownloadSection';
 
 const previewSections = [
   {
@@ -82,6 +83,9 @@ export default function HomePage() {
         </Link>
         <div className="flex items-center gap-1.5 sm:gap-2">
           <ThemeToggle />
+          <Button asChild variant="ghost" className="hidden sm:inline-flex">
+            <a href="#download">Download</a>
+          </Button>
           <Button asChild variant="ghost" className="hidden sm:inline-flex">
             <Link href="/login">Sign in</Link>
           </Button>
@@ -168,6 +172,9 @@ export default function HomePage() {
             </div>
           ))}
         </section>
+        <div className="pb-20">
+          <DownloadSection />
+        </div>
       </main>
 
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">

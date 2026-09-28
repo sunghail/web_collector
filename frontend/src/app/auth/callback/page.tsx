@@ -43,14 +43,11 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        // Call our API to create JWT and set cookie
+        // Our server checks this token with Supabase, then sets its own login cookie.
         const response = await fetch('/api/auth/google', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: newSession.user.email,
-            name: newSession.user.user_metadata?.full_name || newSession.user.email?.split('@')[0],
-          }),
+          body: JSON.stringify({ accessToken: newSession.access_token }),
         });
 
         if (!response.ok) {

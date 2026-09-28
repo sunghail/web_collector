@@ -269,7 +269,7 @@ export function Sidebar({
   const handleDelete = async (category: Category) => {
     const count = linkCounts?.[category.id] ?? 0;
     const message = count
-      ? `Delete “${category.name}”? Its ${count} ${count === 1 ? 'link' : 'links'} will no longer be in this category.`
+      ? `Delete “${category.name}”? Its ${count} ${count === 1 ? 'link moves' : 'links move'} to the Inbox.`
       : `Delete “${category.name}”?`;
     if (!window.confirm(message)) return;
     try {
