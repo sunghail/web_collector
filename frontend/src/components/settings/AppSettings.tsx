@@ -166,6 +166,10 @@ export function AppSettings() {
 
       <Group label="Keyboard">
         <div className="flex items-center justify-between text-[13px]">
+          <span>Quick open: find a link or a place</span>
+          <kbd className="rounded-md border border-border bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">Ctrl K</kbd>
+        </div>
+        <div className="flex items-center justify-between text-[13px]">
           <span>Search links</span>
           <kbd className="rounded-md border border-border bg-muted px-1.5 text-[11px] leading-5 text-muted-foreground">/</kbd>
         </div>

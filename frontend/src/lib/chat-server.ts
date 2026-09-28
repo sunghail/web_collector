@@ -9,11 +9,15 @@ import {
   LINK_TITLE_MAX_LENGTH,
   MAX_LINKS_PER_MESSAGE,
   MESSAGE_MAX_LENGTH,
+  findMentions,
   hostnameOf,
   normalizeShareUrl,
   type ChatMessage,
   type LinkHistoryItem,
+  type Person,
+  type PublicProfile,
   type Reaction,
+  type ReplyPreview,
   type RoomSummary,
   type SharedLink,
 } from '@/lib/chat';
@@ -61,16 +65,48 @@ export async function ensureHandle(userId: string): Promise<string> {
   throw new Error('Could not create an ID');
 }
 
-export async function handlesFor(userIds: (string | null)[]): Promise<Map<string, string>> {
+const PROFILE_COLUMNS = 'user_id, handle, display_name, status_text, avatar_emoji, avatar_color';
+
+/** Public profiles (@ID, display name, status, emoji avatar) for these people. */
+export async function profilesFor(userIds: (string | null)[]): Promise<Map<string, PublicProfile>> {
   const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
-  const map = new Map<string, string>();
+  const map = new Map<string, PublicProfile>();
   if (ids.length === 0) return map;
-  const { data, error } = await supabaseAdmin.from('user_profiles').select('user_id, handle').in('user_id', ids);
+  const run = (columns: string) => supabaseAdmin.from('user_profiles').select(columns).in('user_id', ids);
+  let { data, error } = await run(PROFILE_COLUMNS);
+  // Before the profiles migration only the @ID exists.
+  if (error?.code === '42703') ({ data, error } = await run('user_id, handle'));
   // Before the friends migration runs there are no profiles yet; show fallback IDs instead of failing.
   if (isMissingTable(error)) return map;
   if (error) throw error;
-  for (const row of data ?? []) map.set(row.user_id, row.handle);
+  for (const row of (data ?? []) as unknown as Record<string, string | null>[]) {
+    map.set(row.user_id as string, {
+      handle: row.handle as string,
+      name: row.display_name ?? null,
+      status: row.status_text ?? null,
+      emoji: row.avatar_emoji ?? null,
+      color: row.avatar_color ?? null,
+    });
+  }
   return map;
+}
+
+export async function handlesFor(userIds: (string | null)[]): Promise<Map<string, string>> {
+  const profiles = await profilesFor(userIds);
+  return new Map([...profiles].map(([id, profile]) => [id, profile.handle]));
+}
+
+/** A person as shown in lists: @ID, display name, avatar and status. */
+export function personFrom(id: string, profiles: Map<string, PublicProfile>): Person {
+  const profile = profiles.get(id);
+  return {
+    id,
+    handle: profile?.handle || fallbackHandle(id),
+    name: profile?.name ?? null,
+    emoji: profile?.emoji ?? null,
+    color: profile?.color ?? null,
+    status: profile?.status ?? null,
+  };
 }
 
 export function isValidHandle(handle: string) {
@@ -99,6 +135,7 @@ export interface MessageRow {
   link_url: string | null;
   link_title: string | null;
   collection_name?: string | null;
+  reply_to_id?: string | null;
   created_at: string;
 }
 
@@ -106,6 +143,17 @@ export interface MessageRow {
 export type MessageSource = 'community' | 'room';
 
 const LINK_MESSAGE_COLUMN = { community: 'community_message_id', room: 'chat_message_id' } as const;
+const MESSAGE_TABLE = { community: 'community_messages', room: 'chat_messages' } as const;
+const REPLY_SNIPPET_LENGTH = 100;
+
+/** The messages being replied to, with enough to show a one-line quote. */
+async function replyTargetsFor(source: MessageSource, rows: MessageRow[]) {
+  const ids = [...new Set(rows.map((row) => row.reply_to_id).filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return [];
+  const { data, error } = await supabaseAdmin.from(MESSAGE_TABLE[source]).select('id, user_id, body, link_url').in('id', ids);
+  if (error) throw error;
+  return (data ?? []) as { id: string; user_id: string | null; body: string; link_url: string | null }[];
+}
 const REACTION_TABLE = { community: 'community_message_reactions', room: 'chat_message_reactions' } as const;
 // Message ids go in the request address; keep each request well under URL length limits.
 const ID_CHUNK = 100;
@@ -135,15 +183,33 @@ async function sharedLinksFor(source: MessageSource, messageIds: string[]): Prom
 /** Messages ready for the browser: authors' @IDs, shared sites and the viewer's view of reactions. */
 export async function buildMessages(source: MessageSource, rows: MessageRow[], viewerId: string): Promise<ChatMessage[]> {
   const userRows = rows.filter((row) => (row.kind ?? 'user') === 'user').map((row) => row.id);
-  const [handles, links, reactions] = await Promise.all([
-    handlesFor(rows.map((row) => row.user_id)),
+  const replyTargets = await replyTargetsFor(source, rows);
+  const [profiles, links, reactions] = await Promise.all([
+    profilesFor([...rows.map((row) => row.user_id), ...replyTargets.map((target) => target.user_id), viewerId]),
     sharedLinksFor(source, userRows),
     reactionsFor(REACTION_TABLE[source], userRows, viewerId),
   ]);
+  const viewerHandle = profiles.get(viewerId)?.handle;
+  const replies = new Map<string, ReplyPreview>(
+    replyTargets.map((target) => [
+      target.id,
+      {
+        id: target.id,
+        authorHandle: (target.user_id && profiles.get(target.user_id)?.handle) || fallbackHandle(target.user_id),
+        authorName: (target.user_id && profiles.get(target.user_id)?.name) || null,
+        snippet: target.body.trim().slice(0, REPLY_SNIPPET_LENGTH) || (target.link_url ? 'Shared a site' : 'Message'),
+      },
+    ])
+  );
   return rows.map((row) => ({
     id: row.id,
     userId: row.user_id,
-    authorHandle: (row.user_id && handles.get(row.user_id)) || fallbackHandle(row.user_id),
+    authorHandle: (row.user_id && profiles.get(row.user_id)?.handle) || fallbackHandle(row.user_id),
+    authorName: (row.user_id && profiles.get(row.user_id)?.name) || null,
+    authorEmoji: (row.user_id && profiles.get(row.user_id)?.emoji) || null,
+    authorColor: (row.user_id && profiles.get(row.user_id)?.color) || null,
+    replyTo: (row.reply_to_id && replies.get(row.reply_to_id)) || null,
+    mentionsMe: Boolean(viewerHandle && row.user_id !== viewerId && findMentions(row.body).includes(viewerHandle)),
     kind: row.kind ?? 'user',
     body: row.body,
     // Messages from before the shared links table only have the one site stored on the message itself.
@@ -160,6 +226,7 @@ export interface MessageInput {
   body: string;
   links: SharedLink[];
   collectionName: string | null;
+  replyToId: string | null;
 }
 
 /**
@@ -172,6 +239,7 @@ export function parseMessageInput(payload: {
   linkUrl?: unknown;
   linkTitle?: unknown;
   collectionName?: unknown;
+  replyToId?: unknown;
 }): MessageInput | { error: string } {
   const body = typeof payload.body === 'string' ? payload.body.trim() : '';
   if (body.length > MESSAGE_MAX_LENGTH) return { error: `Messages can be up to ${MESSAGE_MAX_LENGTH} characters` };
@@ -199,7 +267,8 @@ export function parseMessageInput(payload: {
   if (!body && links.length === 0) return { error: 'Write a message or attach a site' };
   const rawCollection = typeof payload.collectionName === 'string' ? payload.collectionName.trim() : '';
   const collectionName = links.length > 0 && rawCollection ? rawCollection.slice(0, COLLECTION_NAME_MAX_LENGTH) : null;
-  return { body, links, collectionName };
+  const replyToId = typeof payload.replyToId === 'string' && UUID_PATTERN.test(payload.replyToId) ? payload.replyToId : null;
+  return { body, links, collectionName, replyToId };
 }
 
 /** The columns to insert for a new message; the first site also stays on the message for older pages. */
@@ -209,7 +278,76 @@ export function messageColumns(input: MessageInput) {
     link_url: input.links[0]?.url ?? null,
     link_title: input.links[0]?.title ?? null,
     ...(input.collectionName ? { collection_name: input.collectionName } : {}),
+    ...(input.replyToId ? { reply_to_id: input.replyToId } : {}),
   };
+}
+
+/** A reply must answer a message in the same place (the community room, or the same chat room). */
+export async function isValidReplyTarget(source: MessageSource, replyToId: string, roomId: string | null) {
+  let query = supabaseAdmin.from(MESSAGE_TABLE[source]).select('id').eq('id', replyToId);
+  if (source === 'room') query = query.eq('room_id', roomId as string);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+// ---------- Mentions ----------
+
+const MAX_MENTIONS_PER_MESSAGE = 20;
+
+/**
+ * Records who a new message calls with @ID, so they get a badge. In a chat room only its members
+ * can be mentioned. Skipped quietly before the mentions migration runs.
+ */
+export async function saveMentions(source: MessageSource, messageId: string, roomId: string | null, authorId: string, body: string) {
+  const handles = findMentions(body).slice(0, MAX_MENTIONS_PER_MESSAGE);
+  if (handles.length === 0) return;
+  const { data: people, error } = await supabaseAdmin.from('user_profiles').select('user_id').in('handle', handles);
+  if (error) throw error;
+  let ids = (people ?? []).map((p) => p.user_id as string).filter((id) => id !== authorId);
+  if (source === 'room' && ids.length) {
+    const { data: members, error: membersError } = await supabaseAdmin
+      .from('chat_room_members')
+      .select('user_id')
+      .eq('room_id', roomId as string)
+      .in('user_id', ids);
+    if (membersError) throw membersError;
+    ids = (members ?? []).map((m) => m.user_id as string);
+  }
+  if (ids.length === 0) return;
+  const { error: insertError } = await supabaseAdmin.from('mentions').insert(
+    ids.map((userId) => ({
+      user_id: userId,
+      author_id: authorId,
+      [LINK_MESSAGE_COLUMN[source]]: messageId,
+      room_id: source === 'room' ? roomId : null,
+    }))
+  );
+  if (isMissingTable(insertError)) return;
+  if (insertError) throw insertError;
+}
+
+/** How many mentions the person has not seen yet, in the community room and in chat rooms. */
+export async function unseenMentions(userId: string) {
+  const count = async (inCommunity: boolean) => {
+    let query = supabaseAdmin.from('mentions').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('seen_at', null);
+    query = inCommunity ? query.not('community_message_id', 'is', null) : query.not('room_id', 'is', null);
+    const { count: n, error } = await query;
+    if (isMissingTable(error)) return 0;
+    if (error) throw error;
+    return n ?? 0;
+  };
+  const [community, rooms] = await Promise.all([count(true), count(false)]);
+  return { community, rooms };
+}
+
+/** Marks mentions as seen once the person has the chat open: "community" or a room id. */
+export async function markMentionsSeen(userId: string, place: string) {
+  let query = supabaseAdmin.from('mentions').update({ seen_at: new Date().toISOString() }).eq('user_id', userId).is('seen_at', null);
+  query = place === 'community' ? query.not('community_message_id', 'is', null) : query.eq('room_id', place);
+  const { error } = await query;
+  if (isMissingTable(error)) return;
+  if (error) throw error;
 }
 
 /**
@@ -491,7 +629,8 @@ export async function listRoomsFor(userId: string): Promise<RoomSummary[]> {
   if (roomsError) throw roomsError;
   if (membersError) throw membersError;
 
-  const handles = await handlesFor((members ?? []).map((m) => m.user_id));
+  const profiles = await profilesFor((members ?? []).map((m) => m.user_id));
+  const handles = new Map([...profiles].map(([id, profile]) => [id, profile.handle]));
   const lastReadByRoom = new Map(memberships.map((m) => [m.room_id, m.last_read_at as string]));
 
   const summaries = await Promise.all(
@@ -533,6 +672,7 @@ export async function listRoomsFor(userId: string): Promise<RoomSummary[]> {
           : null,
         lastMessageAt: room.last_message_at,
         unread: count ?? 0,
+        person: room.is_direct && other ? personFrom(other.user_id, profiles) : null,
       } satisfies RoomSummary;
     })
   );

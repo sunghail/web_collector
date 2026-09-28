@@ -74,8 +74,16 @@ function FriendPicker({
               onClick={() => toggle(friend.id)}
               className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-accent"
             >
-              <Avatar handle={friend.handle} size="sm" />
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">@{friend.handle}</span>
+              <Avatar {...friend} size="sm" />
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                {friend.name ? (
+                  <>
+                    {friend.name} <span className="font-normal text-muted-foreground">@{friend.handle}</span>
+                  </>
+                ) : (
+                  `@${friend.handle}`
+                )}
+              </span>
               <span
                 className={`flex size-5 items-center justify-center rounded-md border transition-colors ${
                   isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
@@ -265,9 +273,15 @@ export function MembersDialog({
         <div className="space-y-1">
           {room.members.map((member) => (
             <div key={member.id} className="group flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-accent/60">
-              <Avatar handle={member.handle} size="sm" tone={member.id === currentUserId ? 'primary' : 'muted'} />
+              <Avatar {...member} size="sm" tone={member.id === currentUserId ? 'primary' : 'muted'} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                @{member.handle}
+                {member.name ? (
+                  <>
+                    {member.name} <span className="font-normal text-muted-foreground">@{member.handle}</span>
+                  </>
+                ) : (
+                  `@${member.handle}`
+                )}
                 {member.id === currentUserId && <span className="ml-1.5 text-xs font-normal text-muted-foreground">you</span>}
               </span>
               {member.role === 'owner' && !room.isDirect && (

@@ -15,6 +15,8 @@ import {
 import { NativeSelect } from '@/components/ui/native-select';
 import { Switch } from '@/components/ui/switch';
 import { Link2 } from 'lucide-react';
+import api from '@/lib/api';
+import { normalizeShareUrl } from '@/lib/chat';
 import { Category, Link } from '@/types';
 import {
   DEFAULT_FALLBACK_FAVICON_ID,
@@ -48,6 +50,8 @@ export function AddLinkDialog({
   editingLink,
 }: AddLinkDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
+  // The page's own title, looked up once an address is typed; used when the title is left blank.
+  const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     url: '',
@@ -80,6 +84,23 @@ export function AddLinkDialog({
     }
   }, [editingLink, selectedCategoryId, isOpen]);
 
+  useEffect(() => {
+    setPageTitle(null);
+    const url = normalizeShareUrl(formData.url);
+    if (!isOpen || editingLink || !url) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      api
+        .get('/site-info', { params: { url } })
+        .then((response) => !cancelled && setPageTitle(response.data.title || null))
+        .catch(() => undefined);
+    }, 500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [formData.url, isOpen, editingLink]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -88,7 +109,7 @@ export function AddLinkDialog({
     setIsLoading(true);
     try {
       // Auto-generate title from URL if not provided
-      let title = formData.title.trim();
+      let title = formData.title.trim() || pageTitle || '';
       if (!title) {
         try {
           title = new URL(formData.url).hostname.replace('www.', '');
@@ -132,7 +153,7 @@ export function AddLinkDialog({
         <DialogHeader>
           <DialogTitle>{editingLink ? 'Edit link' : 'New link'}</DialogTitle>
           <DialogDescription>
-            {editingLink ? 'Change where it goes or how it looks.' : 'Paste an address. Leave the title blank to use the site address.'}
+            {editingLink ? 'Change where it goes or how it looks.' : 'Paste an address. Leave the title blank to use the page title.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -160,7 +181,7 @@ export function AddLinkDialog({
             </Label>
             <Input
               id="link-title"
-              placeholder="Uses the site address if empty"
+              placeholder={pageTitle ? `${pageTitle} (from the page)` : 'Uses the page title if empty'}
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             />

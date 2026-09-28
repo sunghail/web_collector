@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
 import { normalizeHandle, type FriendRequest, type Person } from '@/lib/chat';
-import { ensureHandle, fallbackHandle, handlesFor, isMissingTable, setupRequired } from '@/lib/chat-server';
+import { ensureHandle, isMissingTable, personFrom, profilesFor, setupRequired } from '@/lib/chat-server';
 
 const MAX_PENDING_OUTGOING = 30;
 
@@ -31,8 +31,8 @@ export async function GET() {
 
     const rows = (data ?? []) as FriendshipRow[];
     const otherOf = (row: FriendshipRow) => (row.requester_id === me ? row.addressee_id : row.requester_id);
-    const handles = await handlesFor(rows.map(otherOf));
-    const person = (id: string): Person => ({ id, handle: handles.get(id) || fallbackHandle(id) });
+    const profiles = await profilesFor(rows.map(otherOf));
+    const person = (id: string): Person => personFrom(id, profiles);
 
     const friends = rows
       .filter((row) => row.status === 'accepted')

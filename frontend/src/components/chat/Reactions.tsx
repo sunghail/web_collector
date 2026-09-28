@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { SmilePlus, Trash2 } from 'lucide-react';
+import { CornerUpLeft, SmilePlus, Trash2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,8 +40,16 @@ function ReactionPicker({ trigger, onPick }: { trigger: ReactNode; onPick: (emoj
 const toolButton =
   'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground';
 
-/** Floating bar shown while pointing at a message: quick reactions, the full list, and delete for your own. */
-export function MessageActions({ onReact, onDelete }: { onReact: (emoji: string) => void; onDelete?: () => void }) {
+/** Floating bar shown while pointing at a message: quick reactions, the full list, reply, and delete for your own. */
+export function MessageActions({
+  onReact,
+  onReply,
+  onDelete,
+}: {
+  onReact: (emoji: string) => void;
+  onReply?: () => void;
+  onDelete?: () => void;
+}) {
   return (
     <div
       className="
@@ -69,6 +77,14 @@ export function MessageActions({ onReact, onDelete }: { onReact: (emoji: string)
           </button>
         }
       />
+      {onReply && (
+        <>
+          <span className="mx-0.5 h-4 w-px bg-border" />
+          <button type="button" onClick={onReply} aria-label="Reply" title="Reply" className={toolButton}>
+            <CornerUpLeft className="size-4" />
+          </button>
+        </>
+      )}
       {onDelete && (
         <>
           <span className="mx-0.5 h-4 w-px bg-border" />

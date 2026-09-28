@@ -20,6 +20,8 @@ import { FriendsView } from '@/components/social/FriendsView';
 import { LinkHistoryView } from '@/components/social/LinkHistoryView';
 import { ShareToChatDialog } from '@/components/chat/ShareToChatDialog';
 import type { ChatPlace } from '@/lib/shareToChat';
+import { QuickOpen } from '@/components/links/QuickOpen';
+import { useMyProfile } from '@/lib/myProfile';
 import type { SocialView } from '@/components/layout/Sidebar';
 import { LinkGrid } from '@/components/links/LinkGrid';
 import { AddLinkDialog } from '@/components/links/AddLinkDialog';
@@ -39,7 +41,8 @@ export default function DashboardPage() {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   // A chat message to scroll to after opening its chat (from the Link history).
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
-  const [socialBadges, setSocialBadges] = useState({ unreadMessages: 0, pendingRequests: 0 });
+  const [socialBadges, setSocialBadges] = useState({ unreadMessages: 0, pendingRequests: 0, communityMentions: 0 });
+  const loadMyProfile = useMyProfile((state) => state.load);
 
   // Sidebar badges for unread chat messages and friend requests.
   const refreshSocialBadges = useCallback(async () => {
@@ -48,6 +51,7 @@ export default function DashboardPage() {
       setSocialBadges({
         unreadMessages: response.data.unreadMessages ?? 0,
         pendingRequests: response.data.pendingRequests ?? 0,
+        communityMentions: response.data.mentions?.community ?? 0,
       });
     } catch {
       // Badges are a nice-to-have; try again on the next tick.
@@ -151,9 +155,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isAuthenticated) return;
     refreshSocialBadges();
+    loadMyProfile();
     const timer = window.setInterval(() => !document.hidden && refreshSocialBadges(), 20000);
     return () => window.clearInterval(timer);
-  }, [isAuthenticated, refreshSocialBadges]);
+  }, [isAuthenticated, refreshSocialBadges, loadMyProfile]);
 
   const getDuplicateMessage = (error: unknown) => {
     const response = (error as {
@@ -601,6 +606,7 @@ export default function DashboardPage() {
         }}
         unreadMessages={socialBadges.unreadMessages}
         pendingRequests={socialBadges.pendingRequests}
+        communityMentions={socialBadges.communityMentions}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
@@ -613,6 +619,8 @@ export default function DashboardPage() {
             onLinkSaved={handleLinkSavedFromChat}
             focusMessageId={focusMessageId}
             onFocused={() => setFocusMessageId(null)}
+            unseenMentions={socialBadges.communityMentions}
+            onMentionsSeen={refreshSocialBadges}
           />
         ) : view === 'chats' && user ? (
           <ChatsView
@@ -789,6 +797,16 @@ export default function DashboardPage() {
       />
 
       <ShareToChatDialog onOpenPlace={(place) => openChat(place)} />
+      <QuickOpen
+        onSelectCategory={(id) => {
+          setSelectedCategoryId(id);
+          setView('links');
+        }}
+        onOpenView={(next) => {
+          setFocusMessageId(null);
+          setView(next);
+        }}
+      />
 
       {/* Add/Edit Link Dialog */}
       <AddLinkDialog

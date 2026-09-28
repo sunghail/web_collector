@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, MessageCircle, Pencil, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { Check, MessageCircle, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import api from '@/lib/api';
-import { HANDLE_PATTERN, normalizeHandle, type FriendRequest, type Person } from '@/lib/chat';
-import { Avatar, PageHeader, SetupNotice, errorMessage, isSetupRequired } from './SocialParts';
+import { normalizeHandle, type FriendRequest, type Person } from '@/lib/chat';
+import { useMyProfile } from '@/lib/myProfile';
+import { ProfileCard } from './ProfileCard';
+import { Avatar, PageHeader, PersonName, SetupNotice, errorMessage, isSetupRequired } from './SocialParts';
 
 interface FriendsViewProps {
   onOpenSidebar: () => void;
@@ -33,7 +35,7 @@ function Section({ title, count, children }: { title: string; count?: number; ch
 const rowClass = 'flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 shadow-card';
 
 export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsViewProps) {
-  const [myHandle, setMyHandle] = useState<string | null>(null);
+  const { profile: myProfile, set: setMyProfile } = useMyProfile();
   const [friends, setFriends] = useState<Person[]>([]);
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
@@ -41,13 +43,11 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
   const [needsSetup, setNeedsSetup] = useState(false);
   const [addInput, setAddInput] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [isEditingId, setIsEditingId] = useState(false);
-  const [idDraft, setIdDraft] = useState('');
 
   const load = useCallback(async () => {
     try {
       const [profile, list] = await Promise.all([api.get('/profile'), api.get('/friends')]);
-      setMyHandle(profile.data.profile.handle);
+      setMyProfile(profile.data.profile);
       setFriends(list.data.friends);
       setIncoming(list.data.incoming);
       setOutgoing(list.data.outgoing);
@@ -57,7 +57,7 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [setMyProfile]);
 
   useEffect(() => {
     load();
@@ -102,22 +102,6 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
     }
   };
 
-  const saveId = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const handle = normalizeHandle(idDraft);
-    try {
-      const response = await api.put('/profile', { handle });
-      setMyHandle(response.data.profile.handle);
-      setIsEditingId(false);
-      toast.success('Your ID is updated');
-    } catch (error) {
-      toast.error(errorMessage(error, 'Could not change your ID'));
-    }
-  };
-
-  const draftHandle = normalizeHandle(idDraft);
-  const isDraftValid = HANDLE_PATTERN.test(draftHandle);
-
   return (
     <div className="flex h-dvh flex-col">
       <PageHeader
@@ -138,65 +122,7 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
 
         {!isLoading && !needsSetup && (
           <div className="mx-auto max-w-2xl space-y-8">
-            {/* My ID */}
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">My ID</div>
-              {isEditingId ? (
-                <form onSubmit={saveId} className="mt-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">@</span>
-                      <Input
-                        autoFocus
-                        value={idDraft}
-                        onChange={(e) => setIdDraft(e.target.value)}
-                        aria-label="New ID"
-                        className="pl-7 font-medium"
-                        maxLength={21}
-                      />
-                    </div>
-                    <Button type="submit" disabled={!isDraftValid}>Save</Button>
-                    <Button type="button" variant="ghost" onClick={() => setIsEditingId(false)}>Cancel</Button>
-                  </div>
-                  <p className={`text-xs ${idDraft && !isDraftValid ? 'text-destructive' : 'text-muted-foreground'}`}>
-                    3–20 characters: lowercase letters, numbers, _ and .
-                  </p>
-                </form>
-              ) : (
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <span className="text-2xl font-semibold tracking-[-0.02em]">@{myHandle}</span>
-                  <div className="ml-auto flex gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => {
-                        navigator.clipboard?.writeText(`@${myHandle}`);
-                        toast.success('ID copied');
-                      }}
-                    >
-                      <Copy className="size-3.5" />
-                      Copy
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => {
-                        setIdDraft(myHandle ?? '');
-                        setIsEditingId(true);
-                      }}
-                    >
-                      <Pencil className="size-3.5" />
-                      Change
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <p className="mt-2 text-xs text-muted-foreground">
-                Share this ID so friends can find you. Your login name stays private.
-              </p>
-            </div>
+            {myProfile && <ProfileCard profile={myProfile} />}
 
             {/* Add a friend */}
             <Section title="Add a friend">
@@ -224,9 +150,9 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
                 <div className="space-y-2">
                   {incoming.map((request) => (
                     <div key={request.id} className={rowClass}>
-                      <Avatar handle={request.person.handle} />
+                      <Avatar {...request.person} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">@{request.person.handle}</div>
+                        <PersonName person={request.person} />
                         <div className="text-xs text-muted-foreground">wants to be friends</div>
                       </div>
                       <Button
@@ -256,9 +182,9 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
                   ))}
                   {outgoing.map((request) => (
                     <div key={request.id} className={rowClass}>
-                      <Avatar handle={request.person.handle} />
+                      <Avatar {...request.person} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold">@{request.person.handle}</div>
+                        <PersonName person={request.person} />
                         <div className="text-xs text-muted-foreground">waiting for them to accept</div>
                       </div>
                       <Button
@@ -288,8 +214,10 @@ export function FriendsView({ onOpenSidebar, onMessage, onChanged }: FriendsView
                 <div className="space-y-2">
                   {friends.map((friend) => (
                     <div key={friend.id} className={`group ${rowClass}`}>
-                      <Avatar handle={friend.handle} />
-                      <div className="min-w-0 flex-1 truncate text-sm font-semibold">@{friend.handle}</div>
+                      <Avatar {...friend} />
+                      <div className="min-w-0 flex-1">
+                        <PersonName person={friend} showStatus />
+                      </div>
                       <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onMessage(friend)}>
                         <MessageCircle className="size-3.5" />
                         Message

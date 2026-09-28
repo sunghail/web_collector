@@ -13,17 +13,78 @@ export function isSetupRequired(error: unknown) {
   return (error as ApiError)?.response?.data?.error === 'setup_required';
 }
 
-export function Avatar({ handle, size = 'md', tone = 'muted' }: { handle: string; size?: 'sm' | 'md'; tone?: 'muted' | 'primary' }) {
+const avatarSizes = {
+  xs: { box: 'size-6', letter: 'text-[10px]', emoji: 'text-sm' },
+  sm: { box: 'size-7', letter: 'text-[11px]', emoji: 'text-base' },
+  chat: { box: 'size-8', letter: 'text-xs', emoji: 'text-lg' },
+  md: { box: 'size-9', letter: 'text-xs', emoji: 'text-xl' },
+  lg: { box: 'size-12', letter: 'text-base', emoji: 'text-2xl' },
+  xl: { box: 'size-16', letter: 'text-xl', emoji: 'text-4xl' },
+} as const;
+
+/**
+ * A person's picture: their emoji on their color when they picked one,
+ * otherwise the first letter of their name or @ID.
+ */
+export function Avatar({
+  handle,
+  name,
+  emoji,
+  color,
+  size = 'md',
+  tone = 'muted',
+}: {
+  handle: string;
+  name?: string | null;
+  emoji?: string | null;
+  color?: string | null;
+  size?: keyof typeof avatarSizes;
+  tone?: 'muted' | 'primary';
+}) {
+  const dims = avatarSizes[size];
+  if (emoji) {
+    return (
+      <span
+        aria-hidden="true"
+        className={`flex shrink-0 items-center justify-center rounded-full font-sans leading-none ${dims.box} ${dims.emoji}`}
+        style={{ backgroundColor: color || '#e5e7eb' }}
+      >
+        {emoji}
+      </span>
+    );
+  }
   return (
     <span
       aria-hidden="true"
       className={`
-        flex shrink-0 items-center justify-center rounded-full font-semibold
-        ${size === 'sm' ? 'size-7 text-[11px]' : 'size-9 text-xs'}
-        ${tone === 'primary' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}
+        flex shrink-0 items-center justify-center rounded-full font-sans font-semibold ${dims.box} ${dims.letter}
+        ${color ? 'text-neutral-800' : tone === 'primary' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}
       `}
+      style={color ? { backgroundColor: color } : undefined}
     >
-      {handle.charAt(0).toUpperCase()}
+      {(name || handle).charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+/** "Minji @minji" (or just "@minji" before they set a name), with an optional status line. */
+export function PersonName({
+  person,
+  showStatus = false,
+  suffix,
+}: {
+  person: { handle: string; name?: string | null; status?: string | null };
+  showStatus?: boolean;
+  suffix?: ReactNode;
+}) {
+  return (
+    <span className="block min-w-0">
+      <span className="flex min-w-0 items-baseline gap-1.5">
+        <span className="truncate text-sm font-semibold">{person.name || `@${person.handle}`}</span>
+        {person.name && <span className="shrink-0 truncate text-xs text-muted-foreground">@{person.handle}</span>}
+        {suffix}
+      </span>
+      {showStatus && person.status && <span className="block truncate text-xs text-muted-foreground">{person.status}</span>}
     </span>
   );
 }

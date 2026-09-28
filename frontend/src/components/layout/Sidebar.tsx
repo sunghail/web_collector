@@ -44,6 +44,8 @@ import { Category } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { INBOX_CATEGORY_ID } from '@/lib/linkUtils';
 import { useShareToChat } from '@/lib/shareToChat';
+import { useMyProfile } from '@/lib/myProfile';
+import { Avatar } from '@/components/social/SocialParts';
 import { toast } from 'sonner';
 
 export type SocialView = 'community' | 'chats' | 'friends' | 'history';
@@ -65,6 +67,8 @@ interface SidebarProps {
   onOpenSocial?: (view: SocialView) => void;
   unreadMessages?: number;
   pendingRequests?: number;
+  /** @mentions of me in the community room not seen yet. */
+  communityMentions?: number;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -228,6 +232,7 @@ export function Sidebar({
   onOpenSocial,
   unreadMessages = 0,
   pendingRequests = 0,
+  communityMentions = 0,
   isCollapsed,
   onToggleCollapse,
 }: SidebarProps) {
@@ -303,6 +308,7 @@ export function Sidebar({
     }
   };
 
+  const myProfile = useMyProfile((state) => state.profile);
   const footerButton =
     'flex size-8 items-center justify-center rounded-lg text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground';
 
@@ -366,7 +372,7 @@ export function Sidebar({
               {([
                 { view: 'chats' as const, label: 'Chats', icon: <MessageCircle className="size-4" />, badge: unreadMessages },
                 { view: 'friends' as const, label: 'Friends', icon: <Users className="size-4" />, badge: pendingRequests },
-                { view: 'community' as const, label: 'Community', icon: <MessagesSquare className="size-4" />, badge: 0 },
+                { view: 'community' as const, label: 'Community', icon: <MessagesSquare className="size-4" />, badge: communityMentions },
                 { view: 'history' as const, label: 'Link history', icon: <History className="size-4" />, badge: 0 },
               ]).map((item) => (
                 <NavItem
@@ -458,14 +464,18 @@ export function Sidebar({
               isCollapsed ? 'flex-col' : ''
             }`}
           >
-            <div
-              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/12 text-xs font-semibold text-primary"
-              title={user?.username}
-            >
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
-            </div>
+            <span title={myProfile ? `@${myProfile.handle}` : user?.username}>
+              <Avatar
+                handle={myProfile?.handle || user?.username || 'U'}
+                name={myProfile?.name}
+                emoji={myProfile?.emoji}
+                color={myProfile?.color}
+                size="sm"
+                tone="primary"
+              />
+            </span>
             {!isCollapsed && (
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{user?.username || 'User'}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{myProfile?.name || user?.username || 'User'}</span>
             )}
             <OptionsDialog triggerClassName={footerButton} />
             <button type="button" onClick={handleLogout} aria-label="Log out" title="Log out" className={`${footerButton} hover:text-destructive`}>

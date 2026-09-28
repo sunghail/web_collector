@@ -4,12 +4,12 @@ import { supabaseAdmin } from '@/lib/supabase';
 import { ROOM_NAME_MAX_LENGTH, type RoomDetail } from '@/lib/chat';
 import {
   ensureHandle,
-  fallbackHandle,
-  handlesFor,
   isMissingTable,
   membershipOf,
   notAMember,
+  personFrom,
   postSystemMessage,
+  profilesFor,
   setupRequired,
 } from '@/lib/chat-server';
 
@@ -32,10 +32,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (error) throw error;
     if (membersError) throw membersError;
 
-    const handles = await handlesFor((members ?? []).map((m) => m.user_id));
+    const profiles = await profilesFor((members ?? []).map((m) => m.user_id));
     const people = (members ?? []).map((m) => ({
-      id: m.user_id,
-      handle: handles.get(m.user_id) || fallbackHandle(m.user_id),
+      ...personFrom(m.user_id, profiles),
       role: m.role as 'owner' | 'member',
     }));
     const other = people.find((p) => p.id !== authUser.userId);

@@ -58,7 +58,8 @@ export function LinkHistoryView({ onOpenSidebar, onGoToMessage, onLinkSaved }: L
       try {
         const response = await api.get('/shared-links', { params: { place, q: search || undefined, before: before || undefined } });
         if (id !== requestId.current) return;
-        setItems((current) => (before ? [...current, ...response.data.items] : response.data.items));
+        const page: LinkHistoryItem[] = response.data.items ?? [];
+        setItems((current) => (before ? [...current, ...page] : page));
         setHasMore(Boolean(response.data.hasMore));
         setRooms(response.data.rooms || []);
       } catch (error) {

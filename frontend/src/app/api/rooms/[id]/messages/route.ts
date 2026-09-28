@@ -7,26 +7,29 @@ import {
   canStoreLinks,
   isMissingTable,
   isSendingTooFast,
+  isValidReplyTarget,
   membershipOf,
   messageColumns,
   notAMember,
   parseMessageInput,
+  saveMentions,
   saveSharedLinks,
   setupRequired,
   tooFastResponse,
   type MessageRow,
 } from '@/lib/chat-server';
+import { withPageTitles } from '@/lib/siteInfo';
 
 const PAGE_SIZE = 50;
 const SELECT = 'id, user_id, kind, body, link_url, link_title, created_at';
-// collection_name arrives with the shared links migration; asked for only once it exists.
-const SELECT_WITH_COLLECTION = `${SELECT}, collection_name`;
+// Newer columns arrive with later migrations (shared links, then replies); older databases skip them.
+const COLUMN_SETS = [`${SELECT}, collection_name, reply_to_id`, `${SELECT}, collection_name`, SELECT];
 
-/** Runs a message query, falling back to the older columns before the shared links migration. */
+/** Runs a message query with the newest columns the database has. */
 async function selectMessages<T>(run: (columns: string) => PromiseLike<{ data: T | null; error: { code?: string } | null }>) {
-  const first = await run(SELECT_WITH_COLLECTION);
-  if (first.error?.code === '42703') return run(SELECT); // column does not exist yet
-  return first;
+  let result = await run(COLUMN_SETS[0]);
+  for (let i = 1; i < COLUMN_SETS.length && result.error?.code === '42703'; i++) result = await run(COLUMN_SETS[i]);
+  return result;
 }
 
 // GET /api/rooms/:id/messages (?after=ISO | ?before=ISO) -> members only
@@ -81,7 +84,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// POST /api/rooms/:id/messages { body, links?: [{ url, title, memo }], collectionName? } -> members only
+// POST /api/rooms/:id/messages { body, links?: [{ url, title, memo }], collectionName?, replyToId? } -> members only
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const authUser = await getAuthUser();
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -101,6 +104,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!(await membershipOf(id, authUser.userId))) return notAMember();
     if (!(await canStoreLinks(input))) return setupRequired();
     if (await isSendingTooFast('chat_messages', authUser.userId)) return tooFastResponse();
+    // Sites attached by their bare address get their page title (a moment at most).
+    input.links = await withPageTitles(input.links);
+    if (input.replyToId && !(await isValidReplyTarget('room', input.replyToId, id))) {
+      return NextResponse.json({ error: 'The message you replied to is gone' }, { status: 400 });
+    }
 
     const { data, error } = await supabaseAdmin
       .from('chat_messages')
@@ -109,8 +117,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single();
     if (error) throw error;
 
-    const row = { ...(data as MessageRow), collection_name: input.collectionName };
+    const row = { ...(data as MessageRow), collection_name: input.collectionName, reply_to_id: input.replyToId };
     await saveSharedLinks('room', row.id, id, authUser.userId, input.links);
+    // A missed mention badge must not fail the message itself.
+    await saveMentions('room', row.id, id, authUser.userId, input.body).catch((error) => console.error('Mentions error:', error));
 
     const now = new Date().toISOString();
     await Promise.all([

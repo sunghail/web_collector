@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowDown, Link2, SendHorizontal } from 'lucide-react';
+import { ArrowDown, CornerUpLeft, Link2, SendHorizontal, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import api from '@/lib/api';
@@ -13,15 +13,19 @@ import {
   hostnameOf,
   normalizeShareUrl,
   type ChatMessage,
+  type Person,
   type Reaction,
   type SharedLink,
 } from '@/lib/chat';
+import { useMyProfile } from '@/lib/myProfile';
+import { Avatar } from '@/components/social/SocialParts';
 import { chatFontFamily, useChatPreferences } from '@/lib/chatPreferences';
 import { ShareSiteDialog } from './ShareSiteDialog';
 import { MessageActions, ReactionChips } from './Reactions';
 import { SharedLinks } from './SharedLinks';
 import { AttachmentList } from './AttachmentList';
 import { MessageText } from './MessageText';
+import { MentionPicker } from './MentionPicker';
 import type { Category } from '@/types';
 
 const POLL_MS = 4000;
@@ -71,7 +75,13 @@ export interface ChatThreadProps {
   /** A message to scroll to and highlight once loaded, e.g. when coming from the Link history. */
   focusMessageId?: string | null;
   onFocused?: () => void;
+  /** People who can be @mentioned here besides recent writers, e.g. room members or friends. */
+  mentionCandidates?: Person[];
 }
+
+// "@mi" right before the caret: the start of a mention being typed.
+const MENTION_AT_CARET = /(^|\s)@([a-z0-9_.]{0,20})$/i;
+const MENTION_SUGGESTIONS = 6;
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', weekday: 'short' });
@@ -113,6 +123,7 @@ export function ChatThread({
   onGone,
   focusMessageId,
   onFocused,
+  mentionCandidates,
 }: ChatThreadProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -128,6 +139,13 @@ export function ChatThread({
   const [isSending, setIsSending] = useState(false);
   const [hasUnseen, setHasUnseen] = useState(false);
   const [sizeHint, setSizeHint] = useState<number | null>(null);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  // The mention being typed: where its "@" is and the letters after it.
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  // Bumped to go to a message that is quoted in a reply.
+  const [jumpRequest, setJumpRequest] = useState(0);
+  const myProfile = useMyProfile((state) => state.profile);
   const { fontSize, font, textColor, hydrate: hydrateChatPreferences } = useChatPreferences();
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -322,12 +340,14 @@ export function ChatThread({
     if ((!body && attachments.length === 0) || isSending) return;
     setIsSending(true);
     try {
-      const response = await api.post(endpoint, composeMessage(body, attachments, collectionName));
+      const response = await api.post(endpoint, { ...composeMessage(body, attachments, collectionName), replyToId: replyingTo?.id ?? null });
       pendingScroll.current = { type: 'bottom' };
       mergeNewer([response.data.message], false);
       setText('');
       setAttachments([]);
       setCollectionName(null);
+      setReplyingTo(null);
+      setMention(null);
       textareaRef.current?.focus();
       callbacks.current.onSeen?.();
     } catch (error) {
@@ -416,6 +436,12 @@ export function ChatThread({
     }
   }, [focusMessageId]);
 
+  const jumpTo = (messageId: string) => {
+    focusTarget.current = messageId;
+    focusPagesLoaded.current = 0;
+    setJumpRequest((n) => n + 1);
+  };
+
   useEffect(() => {
     const target = focusTarget.current;
     if (!target || isLoading || isLoadingEarlier) return;
@@ -437,7 +463,7 @@ export function ChatThread({
     }
     // loadEarlier reads the latest messages itself; running again whenever the list changes is intended.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isLoading, isLoadingEarlier, hasMore, focusMessageId]);
+  }, [messages, isLoading, isLoadingEarlier, hasMore, focusMessageId, jumpRequest]);
 
   // Grow the textarea with its content, up to a few lines.
   useEffect(() => {
@@ -446,6 +472,66 @@ export function ChatThread({
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [text, fontSize, font]);
+
+  // Who can be mentioned: people given by the screen, plus everyone who wrote here; never yourself.
+  const people = (() => {
+    const byId = new Map<string, Person>();
+    for (const person of mentionCandidates ?? []) byId.set(person.id, person);
+    for (const m of messages) {
+      if (m.kind !== 'user' || !m.userId || byId.has(m.userId)) continue;
+      byId.set(m.userId, { id: m.userId, handle: m.authorHandle, name: m.authorName, emoji: m.authorEmoji, color: m.authorColor });
+    }
+    byId.delete(currentUserId);
+    return [...byId.values()];
+  })();
+  const suggestions = mention
+    ? people
+        .filter((p) => {
+          const q = mention.query.toLowerCase();
+          return p.handle.startsWith(q) || (p.name ?? '').toLowerCase().includes(q);
+        })
+        .slice(0, MENTION_SUGGESTIONS)
+    : [];
+
+  /** Finds a mention being typed right before the caret. */
+  const updateMention = (value: string, caret: number | null) => {
+    const before = value.slice(0, caret ?? value.length);
+    const match = before.match(MENTION_AT_CARET);
+    if (!match) {
+      setMention(null);
+      return;
+    }
+    setMention({ start: before.length - match[2].length - 1, query: match[2] });
+    setMentionIndex(0);
+  };
+
+  const insertMention = (person: Person) => {
+    if (!mention) return;
+    const el = textareaRef.current;
+    const caret = el?.selectionStart ?? text.length;
+    const inserted = `@${person.handle} `;
+    const next = text.slice(0, mention.start) + inserted + text.slice(caret);
+    setText(next);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const position = mention.start + inserted.length;
+      el?.focus();
+      el?.setSelectionRange(position, position);
+    });
+  };
+
+  /** A pasted address first shows as "notion.so"; swap in the page title once it is known. */
+  const lookUpTitle = async (url: string) => {
+    try {
+      const { data } = await api.get('/site-info', { params: { url } });
+      if (!data.title) return;
+      setAttachments((current) =>
+        current.map((site) => (site.url === url && site.title === hostnameOf(url) ? { ...site, title: data.title } : site))
+      );
+    } catch {
+      // Keep the address as the title.
+    }
+  };
 
   const remaining = MESSAGE_MAX_LENGTH - text.length;
   const canSend = (text.trim().length > 0 || attachments.length > 0) && remaining >= 0 && !isSending && !needsSetup;
@@ -524,34 +610,53 @@ export function ChatThread({
                   {dayDivider}
                   <div
                     className={`group relative flex gap-3 rounded-lg px-2 py-1 transition-colors duration-700 hover:bg-accent/50 ${continues ? '' : 'mt-3'} ${
-                      highlightId === message.id ? 'bg-primary/10 ring-2 ring-primary/40' : ''
+                      highlightId === message.id
+                        ? 'bg-primary/10 ring-2 ring-primary/40'
+                        : message.mentionsMe
+                          ? 'bg-amber-400/10 shadow-[inset_3px_0_0] shadow-amber-400'
+                          : ''
                     }`}
                   >
                     <div className="w-8 shrink-0">
                       {!continues && (
-                        <div
-                          className={`flex size-8 items-center justify-center rounded-full font-sans text-xs font-semibold ${
-                            isMine ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {message.authorHandle.charAt(0).toUpperCase()}
-                        </div>
+                        <Avatar
+                          handle={message.authorHandle}
+                          name={message.authorName}
+                          emoji={message.authorEmoji}
+                          color={message.authorColor}
+                          size="chat"
+                          tone={isMine ? 'primary' : 'muted'}
+                        />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       {!continues && (
                         <div className="flex items-baseline gap-2">
-                          <span className="text-[0.93em] font-semibold">{message.authorHandle}</span>
+                          <span className="text-[0.93em] font-semibold">{message.authorName || message.authorHandle}</span>
+                          {message.authorName && <span className="text-[0.79em] text-muted-foreground">@{message.authorHandle}</span>}
                           {isMine && <span className="text-[0.79em] text-muted-foreground">you</span>}
                           <time className="text-[0.79em] text-muted-foreground" dateTime={message.createdAt}>
                             {timeFormat.format(date)}
                           </time>
                         </div>
                       )}
+                      {message.replyTo && (
+                        <button
+                          type="button"
+                          onClick={() => jumpTo(message.replyTo!.id)}
+                          title="Go to the original message"
+                          className="mb-0.5 mt-0.5 flex max-w-full items-center gap-1.5 rounded-md border-l-2 border-primary/40 bg-muted/60 px-2 py-1 text-left text-[0.86em] text-muted-foreground transition-colors hover:bg-muted"
+                        >
+                          <CornerUpLeft className="size-3 shrink-0" />
+                          <span className="shrink-0 font-medium text-foreground/80">
+                            {message.replyTo.authorName || `@${message.replyTo.authorHandle}`}
+                          </span>
+                          <span className="truncate">{message.replyTo.snippet}</span>
+                        </button>
+                      )}
                       {message.body && (
                         <p className="whitespace-pre-wrap break-words leading-relaxed" style={textColor ? { color: textColor } : undefined}>
-                          <MessageText text={message.body} />
+                          <MessageText text={message.body} myHandle={myProfile?.handle} />
                         </p>
                       )}
                       <SharedLinks
@@ -565,6 +670,10 @@ export function ChatThread({
                     </div>
                     <MessageActions
                       onReact={(emoji) => toggleReaction(message, emoji)}
+                      onReply={() => {
+                        setReplyingTo(message);
+                        textareaRef.current?.focus();
+                      }}
                       onDelete={isMine ? () => remove(message) : undefined}
                     />
                   </div>
@@ -593,7 +702,27 @@ export function ChatThread({
       )}
 
       <div className="shrink-0 border-t border-border/80 bg-background/85 px-4 py-3 backdrop-blur-md md:px-8">
-        <div className="mx-auto max-w-3xl">
+        <div className="relative mx-auto max-w-3xl">
+          {replyingTo && (
+            <div className="mb-2 flex max-w-xl items-center gap-2 rounded-lg border-l-2 border-primary bg-card px-3 py-1.5 text-xs shadow-card">
+              <CornerUpLeft className="size-3.5 shrink-0 text-primary" />
+              <span className="shrink-0 font-medium">Replying to {replyingTo.authorName || `@${replyingTo.authorHandle}`}</span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {replyingTo.body || (replyingTo.links.length ? 'Shared a site' : '')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setReplyingTo(null)}
+                aria-label="Cancel reply"
+                className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
+          {mention && suggestions.length > 0 && (
+            <MentionPicker people={suggestions} activeIndex={mentionIndex} onPick={insertMention} onHover={setMentionIndex} />
+          )}
           <AttachmentList
             links={attachments}
             collectionName={collectionName}
@@ -625,7 +754,12 @@ export function ChatThread({
               ref={textareaRef}
               rows={1}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                updateMention(e.target.value, e.target.selectionStart);
+              }}
+              onClick={(e) => updateMention(text, e.currentTarget.selectionStart)}
+              onBlur={() => window.setTimeout(() => setMention(null), 150)}
               onPaste={(e) => {
                 // Pasting just a web address attaches it as a site card instead of plain text.
                 const pasted = e.clipboardData.getData('text').trim();
@@ -634,8 +768,32 @@ export function ChatThread({
                 if (!url) return;
                 e.preventDefault();
                 attach([{ url, title: hostnameOf(url), memo: null }]);
+                lookUpTitle(url);
               }}
               onKeyDown={(e) => {
+                // While mention suggestions are open, the arrows, Enter and Tab pick from them.
+                if (mention && suggestions.length > 0 && !e.nativeEvent.isComposing) {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const step = e.key === 'ArrowDown' ? 1 : -1;
+                    setMentionIndex((i) => (i + step + suggestions.length) % suggestions.length);
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    insertMention(suggestions[mentionIndex] ?? suggestions[0]);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setMention(null);
+                    return;
+                  }
+                }
+                if (e.key === 'Escape' && replyingTo) {
+                  setReplyingTo(null);
+                  return;
+                }
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   send();

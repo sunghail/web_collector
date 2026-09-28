@@ -104,7 +104,7 @@ function RoomList({
             }`}
           >
             {room.isDirect ? (
-              <Avatar handle={room.title} />
+              <Avatar handle={room.title} name={room.person?.name} emoji={room.person?.emoji} color={room.person?.color} />
             ) : (
               <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary" aria-hidden="true">
                 <Users className="size-4" />
@@ -113,7 +113,7 @@ function RoomList({
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-2">
                 <span className={`min-w-0 flex-1 truncate text-[13.5px] ${room.unread ? 'font-semibold' : 'font-medium'}`}>
-                  {room.isDirect ? `@${room.title}` : room.title}
+                  {room.isDirect ? room.person?.name || `@${room.title}` : room.title}
                 </span>
                 <span className="shrink-0 text-[11px] text-muted-foreground">{when(room.lastMessageAt)}</span>
               </span>
@@ -251,16 +251,20 @@ export function ChatsView({
           title="See people in this room"
         >
           {room.isDirect ? (
-            <Avatar handle={room.title} />
+            <Avatar {...(room.members.find((m) => m.id !== currentUserId) ?? { handle: room.title })} />
           ) : (
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary" aria-hidden="true">
               <Users className="size-4" />
             </span>
           )}
           <span className="min-w-0">
-            <span className="block truncate text-[15px] font-semibold">{room.isDirect ? `@${room.title}` : room.title}</span>
+            <span className="block truncate text-[15px] font-semibold">
+              {room.isDirect ? room.members.find((m) => m.id !== currentUserId)?.name || `@${room.title}` : room.title}
+            </span>
             <span className="block truncate text-xs text-muted-foreground">
-              {room.isDirect ? 'Direct chat' : `${room.members.length} people · ${room.members.map((m) => `@${m.handle}`).join(', ')}`}
+              {room.isDirect
+                ? room.members.find((m) => m.id !== currentUserId)?.status || `@${room.title} · Direct chat`
+                : `${room.members.length} people · ${room.members.map((m) => `@${m.handle}`).join(', ')}`}
             </span>
           </span>
         </button>
@@ -368,6 +372,7 @@ export function ChatsView({
             onLinkSaved={onLinkSaved}
             focusMessageId={focusMessageId}
             onFocused={onFocused}
+            mentionCandidates={room.members}
             onSeen={markRead}
             onGone={() => {
               toast.message('You are no longer in this room');

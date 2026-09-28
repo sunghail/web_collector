@@ -6,6 +6,14 @@ export interface ChatMessage {
   userId: string | null;
   /** The author's public @ID. Login usernames are never sent to other people. */
   authorHandle: string;
+  /** The author's display name and emoji avatar, when they set them. */
+  authorName: string | null;
+  authorEmoji: string | null;
+  authorColor: string | null;
+  /** The message this one answers, shown as a short quote above it. */
+  replyTo: ReplyPreview | null;
+  /** True when the message calls the viewer with their @ID. */
+  mentionsMe: boolean;
   kind: 'user' | 'system';
   body: string;
   /** Sites shared with the message, in order, each with the sharer's optional note. */
@@ -15,6 +23,14 @@ export interface ChatMessage {
   createdAt: string;
   /** Emoji reactions, in the order each emoji was first used. Empty for system notes. */
   reactions: Reaction[];
+}
+
+export interface ReplyPreview {
+  id: string;
+  authorHandle: string;
+  authorName: string | null;
+  /** The start of the original text, or a note like "Shared 3 sites". */
+  snippet: string;
 }
 
 export interface SharedLink {
@@ -65,6 +81,52 @@ export function isAllowedReaction(value: unknown): value is string {
 export interface Person {
   id: string;
   handle: string;
+  name?: string | null;
+  emoji?: string | null;
+  color?: string | null;
+  status?: string | null;
+}
+
+/** What everyone can see about a person: @ID, display name, one-line status and emoji avatar. */
+export interface PublicProfile {
+  handle: string;
+  name: string | null;
+  status: string | null;
+  emoji: string | null;
+  color: string | null;
+}
+
+export const DISPLAY_NAME_MAX_LENGTH = 30;
+export const STATUS_MAX_LENGTH = 80;
+
+/** Emoji avatars people can pick from. */
+export const AVATAR_EMOJIS = [
+  '😀', '😎', '🤓', '🥳', '😴', '🤖', '👻', '👽',
+  '🐶', '🐱', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁',
+  '🐸', '🐧', '🐤', '🦉', '🐙', '🦄', '🐝', '🐳',
+  '🌸', '🌻', '🍀', '🌈', '⭐', '🔥', '⚡', '🌙',
+  '🍎', '🍑', '🍩', '🍕', '☕', '🎧', '🎮', '📚',
+  '🎨', '🚀', '⚽', '🏀', '🎸', '💡', '💎', '🧩',
+];
+
+/** Background colors for avatars; they work with white or dark emoji alike. */
+export const AVATAR_COLORS = ['#e5e7eb', '#fde68a', '#fecaca', '#fbcfe8', '#ddd6fe', '#bfdbfe', '#a7f3d0', '#fed7aa'];
+
+export function isAllowedAvatarEmoji(value: unknown): value is string {
+  return typeof value === 'string' && AVATAR_EMOJIS.includes(value);
+}
+
+export function isAllowedAvatarColor(value: unknown): value is string {
+  return typeof value === 'string' && AVATAR_COLORS.includes(value);
+}
+
+/** "@minji" style mentions in text, as the lowercase @IDs they name. */
+export const MENTION_PATTERN = /(^|[^a-z0-9_.@/])@([a-z0-9_.]{3,20})/gi;
+
+export function findMentions(text: string): string[] {
+  const found = new Set<string>();
+  for (const match of text.matchAll(MENTION_PATTERN)) found.add(match[2].toLowerCase().replace(/.+$/, ''));
+  return [...found].filter((handle) => handle.length >= 3);
 }
 
 export interface FriendRequest {
@@ -82,6 +144,8 @@ export interface RoomSummary {
   lastMessage: { authorHandle: string; body: string; hasLink: boolean; kind: 'user' | 'system' } | null;
   lastMessageAt: string;
   unread: number;
+  /** For direct chats: the other person's display name and avatar. */
+  person?: Person | null;
 }
 
 export interface RoomDetail {
